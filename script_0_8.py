@@ -1,5 +1,5 @@
 """
-    set servos from switch input
+    set servos from hardware switch input
     - servos are set asynchronously
 """
 
@@ -12,7 +12,6 @@ from script_0_7 import ServoSG90, ServoGroup
 
 async def main():
     """ module run-time code """
-
     print('In main()')
 
     def get_servo_demand(sw_states_, switch_servos_):
@@ -53,7 +52,6 @@ async def main():
     servo_group.initialise(servo_init)
     print('servo_group initialised')
     prev_states = {}
-    servo_demand = {}
     while True:
         sw_states = switch_group.get_states()
         if sw_states != prev_states:

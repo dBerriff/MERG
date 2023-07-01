@@ -1,5 +1,5 @@
 """
-    set servos from switch input
+    set servos from test values for switch input
     - servos are set asynchronously
 """
 
@@ -162,6 +162,7 @@ class ServoGroup:
 
 async def main():
     """ module run-time code """
+    print('In main()')
 
     def get_servo_demand(sw_states_, switch_servos_):
         """ return dict of servo setting demands """
@@ -178,6 +179,7 @@ async def main():
     # switch test states include no-change values
     test_sw_states = ({16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
+                      {16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
@@ -215,7 +217,7 @@ async def main():
         print(sw_states)
         await servo_group.match_demand(
             get_servo_demand(sw_states, switch_servos))
-        await asyncio.sleep_ms(1000)
+        await asyncio.sleep_ms(2_000)
 
     
 if __name__ == '__main__':

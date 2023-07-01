@@ -150,7 +150,7 @@ class ServoGroup:
         for servo in self.servos.values():
             servo.zero_pulse()
     
-    async def update_linear(self, demand: dict):
+    async def match_demand(self, demand: dict):
         """ coro: move each servo to match switch demands """
         tasks = []  # list for gathered tasks
         for srv_pin in demand:
@@ -163,8 +163,25 @@ class ServoGroup:
 async def main():
     """ module run-time code """
 
+    def get_servo_demand(sw_states_, switch_servos_):
+        """ return dict of servo setting demands """
+        servo_demand = {}
+        for sw_pin_ in sw_states_:
+            demand_ = sw_states_[sw_pin_]
+            for servo_pin_ in switch_servos_[sw_pin_]:
+                servo_demand[servo_pin_] = demand_
+        return servo_demand
+
     print('In main()')
 
+    # switch states in standard interface dict format
+    # switch test states include no-change values
+    test_sw_states = ({16: 0, 17: 0, 18: 0},
+                      {16: 1, 17: 1, 18: 1},
+                      {16: 1, 17: 1, 18: 1},
+                      {16: 0, 17: 0, 18: 0},
+                      {16: 1, 17: 1, 18: 1},
+                      {16: 0, 17: 0, 18: 0})
     # === switch and servo parameters
     
     # {pin: (off_deg, on_deg, transition_time)}
@@ -194,22 +211,11 @@ async def main():
     servo_group.initialise(servo_init)
     print('servo_group initialised')
     prev_states = {}
-    servo_demand = {}
-    while True:
-        sw_states = switch_group.get_states()
-        if sw_states != prev_states:
-            print(f'switch demand: {sw_states}')
-            # build dict servo_pin: demand
-            for sw_pin in switch_pins:
-                demand = sw_states[sw_pin]
-                for servo_pin in switch_servos[sw_pin]:
-                    servo_demand[servo_pin] = demand
-            result = await servo_group.update_linear(servo_demand)
-            print(f'servo setting: {result}')
-            print()
-            for key in sw_states:
-                prev_states[key] = sw_states[key]
-        await asyncio.sleep_ms(500)
+    for sw_states in test_sw_states:
+        print(sw_states)
+        await servo_group.match_demand(
+            get_servo_demand(sw_states, switch_servos))
+        await asyncio.sleep_ms(1000)
 
     
 if __name__ == '__main__':

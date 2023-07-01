@@ -46,7 +46,7 @@ def main():
     while True:
         sw_states = switch_group.get_states()
         print(sw_states)
-        servo_group.set_servos(sw_states)
+        servo_group.match_demand(sw_states)
         sleep_ms(polling_interval)
 
     

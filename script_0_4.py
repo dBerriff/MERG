@@ -150,7 +150,7 @@ class ServoGroup:
         for servo in self.servos.values():
             servo.zero_pulse()
     
-    def set_servos(self, switch_states):
+    def match_demand(self, switch_states):
         """ set servos from switch_states dictionary """
         for sw in switch_states:
             demand_state = switch_states[sw]
@@ -196,7 +196,7 @@ def main():
     print()
     for sw_states in test_sw_states:
         print(sw_states)
-        servo_group.set_servos(sw_states)
+        servo_group.match_demand(sw_states)
     print('test complete')
 
 

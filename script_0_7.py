@@ -58,7 +58,8 @@ class ServoSG90:
 
     def degrees_to_ns(self, degrees):
         """ convert float degrees to int pulse-width ns """
-        return int(self.PW_MIN + degrees * self.NS_PER_DEGREE)
+        return int(self.PW_MIN
+                   + (degrees - self.DEG_MIN) * self.NS_PER_DEGREE)
     
     def deg_in_range(self, degrees_):
         """ return value within allowed range """
@@ -131,10 +132,9 @@ class ServoGroup:
         - switch_servos_ binds each servo to a specific switch input
     """
     
-    def __init__(self, servo_parameters, switch_servos_):
+    def __init__(self, servo_parameters):
         self.servos = {pin: ServoSG90(pin, *servo_parameters[pin])
                        for pin in servo_parameters}
-        self.switch_servos = switch_servos_
 
     def initialise(self, servo_init_: dict):
         """ initialise servos by servo_init dict
@@ -186,6 +186,8 @@ async def main():
                       {16: 0, 17: 0, 18: 0})
     # === switch and servo parameters
     
+    switch_pins = (16, 17, 18)
+    
     # {pin: (off_deg, on_deg, transition_time)}
     servo_params = {0: (70, 110),
                     1: (110, 70),
@@ -202,13 +204,9 @@ async def main():
                      }
 
     # === end of parameters
-    
-    switch_pins = list(switch_servos.keys())
-    switch_pins.sort()
-    switch_pins = tuple(switch_pins)
 
     switch_group = HwSwitchGroup(switch_pins)
-    servo_group = ServoGroup(servo_params, switch_servos)
+    servo_group = ServoGroup(servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')

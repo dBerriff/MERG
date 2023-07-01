@@ -24,6 +24,8 @@ async def main():
         return servo_demand
 
     # === switch and servo parameters
+
+    switch_pins = (16, 17, 18)
     
     # {pin: (off_deg, on_deg, transition_time)}
     servo_params = {0: (70, 110),
@@ -42,29 +44,18 @@ async def main():
 
     # === end of parameters
     
-    switch_pins = list(switch_servos.keys())
-    switch_pins.sort()
-    switch_pins = tuple(switch_pins)
-
     switch_group = HwSwitchGroup(switch_pins)
-    servo_group = ServoGroup(servo_params, switch_servos)
+    servo_group = ServoGroup(servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
-    print('servo_group initialised')
-    prev_states = {}
+    print('servos initialised')
     while True:
         sw_states = switch_group.get_states()
-        if sw_states != prev_states:
-            print(f'switch demand: {sw_states}')
-            result = await servo_group.match_demand(
-                get_servo_demand(sw_states, switch_servos))
-            print(f'servo setting: {result}')
-            print()
-            for key in sw_states:
-                prev_states[key] = sw_states[key]
-        await asyncio.sleep_ms(500)
+        result = await servo_group.match_demand(
+            get_servo_demand(sw_states, switch_servos))
+        await asyncio.sleep_ms(1000)
 
-    
+
 if __name__ == '__main__':
     try:
         asyncio.run(main())

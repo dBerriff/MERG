@@ -44,12 +44,12 @@ class HwSwitchGroup:
         self.switches = {pin: HwSwitch(pin) for pin in switch_pins_}
         self.n_switches = len(switch_pins_)
         self.pins = switch_pins_
-        self._states = {pin: 0 for pin in switch_pins_}
+        self._states = {pin: 0 for pin in self.pins}
 
     def get_states(self):
         """ poll switch states """
-        for pin in self.pins:
-            self._states[pin] = self.switches[pin].get_state()
+        self._states = {
+            pin: self.switches[pin].get_state() for pin in self.pins}
         return self._states
 
     def print_states(self):
@@ -68,10 +68,10 @@ def main():
 
     # === test data
 
-    switch_pins = (20, 21, 22)
+    switch_pins = (16, 17, 18)
     led_pins = (2, 3, 4, 5)
     # led pins as lists to support multiple LEDs
-    switch_led = {20: [2, 3], 21: [4], 22: [5]}  # switch_pin: led_pin(s) as list
+    switch_led = {16: [2, 3], 17: [4], 18: [5]}  # switch_pin: [led_pin(s)]
 
     # ===
 

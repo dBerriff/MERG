@@ -29,7 +29,7 @@ def main():
     
     # test single switch/button operation
     
-    switch = HwSwitch(20)  # Cytron Maker Pi Pico
+    switch = HwSwitch(20)
     while True:
         state = switch.get_state()
         print(f'pin: {switch.pin} switch state: {state}')

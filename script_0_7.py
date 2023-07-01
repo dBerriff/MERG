@@ -24,6 +24,7 @@ class ServoSG90:
     # corresponding specified pulse widths: 500_000 to 2_500_000 ns
     # set more restrictive values if appropriate
     PW_MIN = const(500_000)  # ns
+    PW_CTR = const(1_500_000)
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)
     DEG_CTR = const(90)
@@ -61,7 +62,7 @@ class ServoSG90:
     
     def deg_in_range(self, degrees_):
         """ return value within allowed range """
-        if self.DEG_MIN < degrees_ <= self.DEG_MAX:
+        if self.DEG_MIN <= degrees_ <= self.DEG_MAX:
             value = degrees_
         else:
             value = self.DEG_CTR
@@ -70,6 +71,7 @@ class ServoSG90:
     def move_servo(self, pw_):
         """ servo machine.PWM setting method """
         # guard against out-of-range demands
+        # ? remove guard following testing ?
         if self.PW_MIN <= pw_ <= self.PW_MAX:
             self.pwm.duty_ns(pw_)
 
@@ -100,11 +102,11 @@ class ServoSG90:
         elif demand_state_ == self.ON:
             pw = self.off_ns
             pw_inc = self.step_pw
-            set_demand = self.set_on  # method
+            set_demand = self.set_on  # method pointer
         elif demand_state_ == self.OFF:
             pw = self.on_ns
             pw_inc = -self.step_pw
-            set_demand = self.set_off  # method
+            set_demand = self.set_off  # method pointer
         else:
             return
 
@@ -116,8 +118,8 @@ class ServoSG90:
             self.move_servo(pw)
             await asyncio.sleep_ms(self.step_ms)
         # set final position
-        set_demand()  # call set_off or set_on method
-        # blocking delay!
+        set_demand()  # call setting method
+        # allow for final rotation
         await asyncio.sleep_ms(self.SET_WAIT)
         self.zero_pulse()
         return self.state  # for asyncio.gather()
@@ -137,21 +139,20 @@ class ServoGroup:
     def initialise(self, servo_init_: dict):
         """ initialise servos by servo_init dict
             - allows for reading initial states from file
+            - not async: avoid start-up current spike
         """
         for pin in servo_init_:
             if servo_init_[pin] == 1:
                 self.servos[pin].set_on()
             else:
                 self.servos[pin].set_off()
-            # blocking delay!
-            sleep_ms(500)  # allow some movement time per servo
+            sleep_ms(500)  # allow movement time
         for servo in self.servos.values():
             servo.zero_pulse()
     
     async def update_linear(self, demand: dict):
         """ coro: move each servo to match switch demands """
-        # within a coro methods are not called as they are appended
-        tasks = []
+        tasks = []  # list for gathered tasks
         for srv_pin in demand:
             servo_ = self.servos[srv_pin]
             tasks.append(servo_.transition(demand[srv_pin]))
@@ -176,9 +177,9 @@ async def main():
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
     
     # {switch-pin: (servo-pin, ...), ...}
-    switch_servos = {16: (0, 1),
-                     17: (2,),
-                     18: (3,)
+    switch_servos = {16: [0, 1],
+                     17: [2],
+                     18: [3]
                      }
 
     # === end of parameters
@@ -204,7 +205,7 @@ async def main():
                 for servo_pin in switch_servos[sw_pin]:
                     servo_demand[servo_pin] = demand
             result = await servo_group.update_linear(servo_demand)
-            print(f'servo setting result: {result}')
+            print(f'servo setting: {result}')
             print()
             for key in sw_states:
                 prev_states[key] = sw_states[key]

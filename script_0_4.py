@@ -24,6 +24,7 @@ class ServoSG90:
     # corresponding specified pulse widths: 500_000 to 2_500_000 ns
     # set more restrictive values if appropriate
     PW_MIN = const(500_000)  # ns
+    PW_CTR = const(1_500_000)  # ns
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)
     DEG_CTR = const(90)
@@ -61,7 +62,7 @@ class ServoSG90:
     
     def deg_in_range(self, degrees_):
         """ return value within allowed range """
-        if self.DEG_MIN < degrees_ <= self.DEG_MAX:
+        if self.DEG_MIN <= degrees_ <= self.DEG_MAX:
             value = degrees_
         else:
             value = self.DEG_CTR
@@ -100,11 +101,11 @@ class ServoSG90:
         elif demand_state_ == self.ON:
             pw = self.off_ns
             pw_inc = self.step_pw
-            set_demand = self.set_on  # method
+            set_demand = self.set_on  # method pointer
         elif demand_state_ == self.OFF:
             pw = self.on_ns
             pw_inc = -self.step_pw
-            set_demand = self.set_off  # method
+            set_demand = self.set_off  # method pointer
         else:
             return
 
@@ -117,11 +118,11 @@ class ServoSG90:
             # blocking delay!
             sleep_ms(self.step_ms)
         # set final position
-        set_demand()  # call set_off or set_on method
+        set_demand()  # invoke method pointer
         # blocking delay!
         sleep_ms(self.SET_WAIT)
         self.zero_pulse()
-        return self.state  # for asyncio.gather()
+        return self.state
 
 
 class ServoGroup:
@@ -165,7 +166,6 @@ def main():
                       {16: 1, 17: 1, 18: 1},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0},
-                      {16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0})
         
@@ -181,9 +181,9 @@ def main():
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
     
     # {switch-pin: (servo-pin, ...), ...}
-    switch_servos = {16: (0, 1),
-                     17: (2,),
-                     18: (3,)
+    switch_servos = {16: [0, 1],
+                     17: [2],
+                     18: [3]
                      }
 
     # === end of parameters

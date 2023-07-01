@@ -1,12 +1,13 @@
 """
-    multi-line module header
+    MicroPython module template
+    - multi-line module header
 """
 
 
 def main():
     """ module run-time code """
     
-    # test or start-up code typically goes here
+    # test or start-up code goes here
     # main() will NOT be run if the module or module elements are imported
     
     print('In main()')

@@ -26,16 +26,17 @@ def main():
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
     
     # {switch-pin: (servo-pin, ...), ...}
-    switch_servos = {16: (0, 1),
-                     17: (2,),
-                     18: (3,)
+    switch_servos = {16: [0, 1],
+                     17: [2],
+                     18: [3]
                      }
+
+    polling_interval = 1_000  # ms
 
     # === end of parameters
     
     switch_pins = list(switch_servos.keys())
     switch_pins.sort()
-    switch_pins = tuple(switch_pins)
 
     switch_group = HwSwitchGroup(switch_pins)
     servo_group = ServoGroup(servo_params, switch_servos)
@@ -44,8 +45,9 @@ def main():
     print('servo_group initialised')
     while True:
         sw_states = switch_group.get_states()
+        print(sw_states)
         servo_group.set_servos(sw_states)
-        sleep_ms(500)
+        sleep_ms(polling_interval)
 
     
 if __name__ == '__main__':

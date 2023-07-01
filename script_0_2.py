@@ -43,7 +43,7 @@ def main():
 
     # test single switch/button to LED operation
 
-    switch = HwSwitch(20)  # Cytron Maker Pi Pico
+    switch = HwSwitch(20)
     led = LedOut(2)
 
     while True:

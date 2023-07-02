@@ -25,6 +25,7 @@ class HwSwitch:
     def __init__(self, pin):
         self.pin = pin  # for diagnostics
         self._hw_in = Pin(pin, Pin.IN, Pin.PULL_UP)
+        self.readings = [1] * self.n_readings
 
     def get_state(self):
         """ get switch state; returns 0 (off) or 1 (on) """
@@ -37,12 +38,12 @@ class HwSwitch:
         """
         value = self._hw_in.value
         pause = self.db_pause
-        inputs = []
+        readings = self.readings
         for i in range(self.n_pauses):
-            inputs.append(value())
+            readings[i] = value()
             await asyncio.sleep_ms(pause)
-        inputs.append(value())
-        return 0 if any(inputs) else 1
+        readings[i + 1] = value()
+        return 0 if any(readings) else 1
 
 
 class HwSwitchGroup:

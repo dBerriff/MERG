@@ -4,10 +4,8 @@
 """
 
 import uasyncio as asyncio
-from machine import Pin, PWM
-from time import sleep_ms
 from script_0_3 import HwSwitchGroup
-from script_0_7 import ServoSG90, ServoGroup
+from script_0_7 import ServoGroup
 
 
 async def main():
@@ -53,6 +51,7 @@ async def main():
         sw_states = switch_group.get_states()
         result = await servo_group.match_demand(
             get_servo_demand(sw_states, switch_servos))
+        print(result)
         await asyncio.sleep_ms(1000)
 
 

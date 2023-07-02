@@ -1,6 +1,7 @@
 """
     set servos from test values for switch input
     - servos are set asynchronously
+    - 90 degrees offset for servo settings
 """
 
 import uasyncio as asyncio
@@ -12,6 +13,7 @@ from script_0_3 import HwSwitchGroup
 class ServoSG90:
     """ control a servo by PWM
         - user units are degrees
+        - 90 degree offset for 0 degree centre-point
         - internal units are pulse-width in ns
           (servos usually specified by pulse-width)
     """

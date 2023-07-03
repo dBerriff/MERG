@@ -37,11 +37,10 @@ class HwSwitch:
             - take n_readings over 20ms
         """
         value = self._hw_in.value
-        pause = self.db_pause
         readings = self.readings
         for i in range(self.n_pauses):
             readings[i] = value()
-            await asyncio.sleep_ms(pause)
+            await asyncio.sleep_ms(self.db_pause)
         readings[self.n_pauses] = value()
         return 0 if any(readings) else 1
 

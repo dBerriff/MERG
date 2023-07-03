@@ -17,7 +17,7 @@ class HwSwitch:
         - get_state() method returns: 0 for off (open), 1 for on (closed)
           inverts pull-up logic
     """
-    
+
     n_readings = const(3)
     n_pauses = const(n_readings - 1)
     db_pause = const(20 // n_pauses)  # de-bounce over approx 20ms
@@ -95,7 +95,7 @@ async def main():
     # === switch and servo parameters
 
     switch_pins = (16, 17, 18)
-    
+
     # {pin: (off_deg, on_deg, transition_time)}
     servo_params = {0: (70, 110),
                     1: (110, 70),
@@ -104,7 +104,7 @@ async def main():
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
-    
+
     # {switch-pin: (servo-pin, ...), ...}
     switch_servos = {16: [0, 1],
                      17: [2],
@@ -112,19 +112,41 @@ async def main():
                      }
 
     # === end of parameters
-    
+
+    async def blink(period_ms=5_000):
+        """ coro: blink the onboard LED """
+        onboard = Pin('LED', Pin.OUT, value=0)
+        pause = max(period_ms, 1_000) - 100
+        while True:
+            onboard.on()
+            await asyncio.sleep_ms(100)
+            onboard.off()
+            await asyncio.sleep_ms(pause)
+
+    async def set_servos(poll_interval_ms=1000):
+        """ coro: set servos from switch inputs """
+
+        def print_change(result_):
+            """ print result_ if any value not None """
+            for v in result_:
+                if v is not None:
+                    print(result_)
+                    break
+
+        while True:
+            sw_states = await switch_group.get_states_db()
+            result = await servo_group.match_demand(
+                get_servo_demand(sw_states, switch_servos))
+            print_change(result)
+            await asyncio.sleep_ms(poll_interval_ms)
+
+    asyncio.create_task(blink())
     switch_group = HwSwitchGroup(switch_pins)
     servo_group = ServoGroup(servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servos initialised')
-    while True:
-        sw_states = await switch_group.get_states_db()
-        print(sw_states)
-        result = await servo_group.match_demand(
-            get_servo_demand(sw_states, switch_servos))
-        print(result)
-        await asyncio.sleep_ms(1000)
+    await set_servos()
 
 
 if __name__ == '__main__':

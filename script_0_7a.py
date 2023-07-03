@@ -137,6 +137,7 @@ class ServoGroup:
     def __init__(self, servo_parameters):
         self.servos = {pin: ServoSG90(pin, *servo_parameters[pin])
                        for pin in servo_parameters}
+        self.tasks = [None] * len(self.servos)
 
     def initialise(self, servo_init_: dict):
         """ initialise servos by servo_init dict
@@ -154,11 +155,10 @@ class ServoGroup:
     
     async def match_demand(self, demand: dict):
         """ coro: move each servo to match switch demands """
-        tasks = []  # list for gathered tasks
-        for srv_pin in demand:
+        for i, srv_pin in enumerate(demand):
             servo_ = self.servos[srv_pin]
-            tasks.append(servo_.transition(demand[srv_pin]))
-        result = await asyncio.gather(*tasks)
+            self.tasks[i] = servo_.transition(demand[srv_pin])
+        result = await asyncio.gather(*self.tasks)
         return result
 
 

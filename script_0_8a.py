@@ -54,6 +54,7 @@ class HwSwitchGroup:
         self.n_switches = len(switch_pins_)
         self.pins = switch_pins_
         self._states = {pin: 0 for pin in self.pins}
+        self.tasks = [None] * self.n_switches  # for tasks in get_states_db
 
     def get_states(self):
         """ poll switch states """
@@ -63,11 +64,10 @@ class HwSwitchGroup:
 
     async def get_states_db(self):
         """ coro: poll switch states with de-bounce """
-        tasks = []
-        for pin in self.pins:
+        for i, pin in enumerate(self.pins):
             switch = self.switches[pin]
-            tasks.append(switch.get_state_db())
-        result = await asyncio.gather(*tasks)
+            self.tasks[i] = switch.get_state_db()
+        result = await asyncio.gather(*self.tasks)
         for i, pin in enumerate(self.pins):
             self._states[pin] = result[i]
         return self._states

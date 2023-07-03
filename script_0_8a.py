@@ -1,6 +1,6 @@
 """
     set servos from hardware switch input
-    - include switch de-bounce
+    - hardware switch de-bounce
     - servos are set asynchronously
 """
 

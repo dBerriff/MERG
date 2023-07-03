@@ -2,6 +2,7 @@
     set servos from test values for switch input
     - servos are set asynchronously
     - 90 degrees offset for servo settings
+    - consider implementing offset as parameter
 """
 
 import uasyncio as asyncio

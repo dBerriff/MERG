@@ -20,7 +20,7 @@ class HwSwitch:
     
     n_readings = const(3)
     n_pauses = const(n_readings - 1)
-    db_pause = const(20 // n_pauses)  # de-bounce over 20ms
+    db_pause = const(20 // n_pauses)  # de-bounce over approx 20ms
 
     def __init__(self, pin):
         self.pin = pin  # for diagnostics
@@ -42,7 +42,7 @@ class HwSwitch:
         for i in range(self.n_pauses):
             readings[i] = value()
             await asyncio.sleep_ms(pause)
-        readings[i + 1] = value()
+        readings[self.n_pauses] = value()
         return 0 if any(readings) else 1
 
 

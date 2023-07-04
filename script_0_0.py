@@ -3,6 +3,7 @@
     - multi-line module header
 """
 
+# classes, functions, other code goes here
 
 def main():
     """ module run-time code """

@@ -11,6 +11,8 @@ from time import sleep_ms
 
 class ServoSG90:
     """ control a servo by PWM
+        - use Pico PWM hardware and built-in MP library
+        - Pico PWM implements 0% to 100% duty cycle inclusive
         - user units are degrees
         - internal units are pulse-width in ns
           (servos usually specified by pulse-width)
@@ -87,11 +89,11 @@ class ServoSG90:
         self.state = self.ON
 
     def activate_pulse(self):
-        """ turn on PWM output """
+        """ restore PWM output """
         self.move_servo(self.pw)
 
     def zero_pulse(self):
-        """ turn off PWM output """
+        """ hold output at zero """
         self.pwm.duty_ns(0)
 
     def transition(self, demand_state_):

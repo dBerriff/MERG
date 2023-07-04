@@ -63,15 +63,18 @@ class HwSwitchGroup:
 def main():
     """ test HwSwitchGroup class """
     print('In main()')
+    
 
-    # test multiple switches/buttons to LEDs operation
+    # test multiple switches/buttons to mulitple LEDs operation
 
     # === test data
 
-    switch_pins = (16, 17, 18)
-    led_pins = (2, 3, 4, 5)
+    switch_pins = [20, 21, 22]
+    
+    # led_pins as tuple
+    led_pins = [2, 3, 4, 5]
     # led pins as lists to support multiple LEDs
-    switch_led = {16: [2, 3], 17: [4], 18: [5]}  # switch_pin: [led_pin(s)]
+    switch_led = {20: [2, 3], 21: [4], 22: [5]}  # switch_pin: [led_pin(s)]
 
     # ===
 

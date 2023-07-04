@@ -33,7 +33,7 @@ def main():
     while True:
         state = switch.get_state()
         print(f'pin: {switch.pin} switch state: {state}')
-        sleep_ms(1000)
+        sleep_ms(1_000)
     
 
 if __name__ == '__main__':

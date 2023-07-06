@@ -56,8 +56,10 @@ class ServoSG9x:
 
     def degrees_to_ns(self, degrees):
         """ convert float degrees to int pulse-width ns """
+        absolute_degrees = degrees - self.DEG_MIN
+        print(absolute_degrees)
         return int(self.PW_MIN
-                   + (degrees - self.DEG_MIN) * self.NS_PER_DEGREE)
+                   + absolute_degrees * self.NS_PER_DEGREE)
     
     def deg_in_range(self, degrees_):
         """ return value within allowed range """
@@ -124,6 +126,7 @@ class ServoSG9x:
         # save final state for next move
         self.pw_ns = final_ns
         self.state = demand_
+        return self.state
 
 
 class ServoGroup:
@@ -153,15 +156,18 @@ class ServoGroup:
 
     async def match_demand(self, demand: dict):
         """ coro: move each servo to match switch demands """
+        # assign tasks elements: avoid creating new list each call
+        tasks = self.tasks
         for i, srv_pin in enumerate(demand):
             servo_ = self.servos[srv_pin]
-            self.tasks[i] = servo_.set_servo_state(demand[srv_pin])
-        result = await asyncio.gather(*self.tasks)
+            tasks[i] = servo_.set_servo_state(demand[srv_pin])
+        result = await asyncio.gather(*tasks)
+        # for testing
         return result
 
 
 async def main():
-    """ module run-time code """
+    """ test servo operation from pre-set "switch" values """
     print('In main()')
 
     def get_servo_demand(sw_states_, switch_servos_):
@@ -182,17 +188,19 @@ async def main():
                       {16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0},
+                      {16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0})
+
     # === switch and servo parameters
     
     # switch_pins = (16, 17, 18)
     
-    # {pin: (off_deg, on_deg, transition_time)}
-    servo_params = {0: (70, 110),
-                    1: (110, 70),
-                    2: (45, 135),
-                    3: (45, 135)
+    # {pin: (off_deg, on_deg)}
+    servo_params = {0: [70, 110],
+                    1: [110, 70],
+                    2: [45, 135],
+                    3: [45, 135]
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
@@ -211,8 +219,9 @@ async def main():
     print('servo_group initialised')
     for sw_states in test_sw_states:
         print(sw_states)
-        await servo_group.match_demand(
+        settings = await servo_group.match_demand(
             get_servo_demand(sw_states, switch_servos))
+        print(settings)
         await asyncio.sleep_ms(2_000)
 
     

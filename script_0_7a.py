@@ -1,14 +1,13 @@
 """
     set servos from test values for switch input
     - servos are set asynchronously
-    - 90 degrees offset for servo settings
+    - -90 degrees offset in this example: set as class constant
     - consider implementing offset as parameter
 """
 
 import uasyncio as asyncio
 from machine import Pin, PWM
 from time import sleep_ms
-from script_0_3 import HwSwitchGroup
 
 
 class ServoSG9x:
@@ -28,6 +27,7 @@ class ServoSG9x:
     PW_MIN = const(500_000)  # ns
     PW_CTR = const(1_500_000)
     PW_MAX = const(2_500_000)  # ns
+    # offset degrees by -90 to give 0 centre-point
     DEG_MIN = const(-90)
     DEG_CTR = const(0)
     DEG_MAX = const(90)
@@ -166,6 +166,7 @@ class ServoGroup:
         # for testing
         return result
 
+
 async def main():
     """ module run-time code """
     print('In main()')
@@ -192,7 +193,7 @@ async def main():
 
     # === switch and servo parameters
     
-    switch_pins = (16, 17, 18)
+    # switch_pins = (16, 17, 18)
     
     # {pin: (off_deg, on_deg, transition_time)}
     servo_params = {0: [-20, 20],
@@ -211,12 +212,10 @@ async def main():
 
     # === end of parameters
 
-    switch_group = HwSwitchGroup(switch_pins)
     servo_group = ServoGroup(servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')
-    prev_states = {}
     for sw_states in test_sw_states:
         print(sw_states)
         settings = await servo_group.match_demand(

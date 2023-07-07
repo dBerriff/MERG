@@ -6,6 +6,7 @@
 import uasyncio as asyncio
 from machine import Pin, PWM
 from time import sleep_ms
+import gc
 
 
 class ServoSG9x:
@@ -23,7 +24,6 @@ class ServoSG9x:
     # corresponding specified pulse widths: 500_000 to 2_500_000 ns
     # set more restrictive values if appropriate
     PW_MIN = const(500_000)  # ns
-    PW_CTR = const(1_500_000)
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)
     DEG_CTR = const(90)
@@ -49,8 +49,6 @@ class ServoSG9x:
         self.pw_ns = None  # for self.activate_pulse()
         self.state = None
         # set servo transition parameters
-        self.pw_range = self.on_ns - self.off_ns
-        self.x_inc = 1
         self.x_steps = 100
         self.step_ms = self.transition_ms // self.x_steps
         self.pw_off_on_inc = (self.on_ns - self.off_ns) // self.x_steps
@@ -96,13 +94,16 @@ class ServoSG9x:
         """ turn off PWM output """
         self.pwm.duty_ns(0)
 
-    async def transition(self, pw, pw_inc):
+    async def transition(self, pw, pw_inc, final_pw):
         """ move servo in linear steps with step_ms pause """
         pause = self.step_ms
         for _ in range(self.x_steps):
             pw += pw_inc
             self.move_servo(pw)
             await asyncio.sleep_ms(pause)
+        # minimise final, cumulative error
+        self.move_servo(final_pw)
+        await asyncio.sleep_ms(pause)
 
     async def set_servo_state(self, demand_):
         """ move servo from pw_ns to demand position """
@@ -111,16 +112,16 @@ class ServoSG9x:
         if demand_ == self.state:
             return
         elif demand_ == self.OFF:
-            pw_inc = (self.off_ns - self.pw_ns) // self.x_steps
+            pw_inc = self.pw_on_off_inc
             final_ns = self.off_ns
         elif demand_ == self.ON:
-            pw_inc = (self.on_ns - self.pw_ns) // self.x_steps
+            pw_inc = self.pw_off_on_inc
             final_ns = self.on_ns
         else:
             return
         # move servo
         self.activate_pulse()
-        await self.transition( self.pw_ns, pw_inc)
+        await self.transition(self.pw_ns, pw_inc, final_ns)
         self.zero_pulse()
         # save final state for next move
         self.pw_ns = final_ns
@@ -143,7 +144,7 @@ class ServoSG9x:
             return
         # move servo
         self.activate_pulse()
-        await self.transition(self.pw_ns, pw_inc)
+        await self.transition(self.pw_ns, pw_inc, final_ns)
         self.zero_pulse()
         # save final state for next move
         self.pw_ns = final_ns
@@ -184,17 +185,7 @@ class ServoGroup:
             servo_ = self.servos[srv_pin]
             # coros will not run until awaited
             tasks[i] = servo_.set_servo_on_off(demand[srv_pin])
-
-        # code for 'concurrent' setting
         result = await asyncio.gather(*tasks)
-
-        """
-        # code for sequential setting
-        result = []
-        for task in tasks:
-            result.append(await task)
-        """
-
         return result  # for testing
 
 
@@ -227,8 +218,8 @@ async def main():
     # switch_pins = (16, 17, 18)
     
     # {pin: (off_deg, on_deg)}
-    servo_params = {0: [70, 110],
-                    1: [110, 70],
+    servo_params = {0: [45, 135],
+                    1: [135, 45],
                     2: [45, 135],
                     3: [45, 135]
                     }
@@ -252,6 +243,7 @@ async def main():
         settings = await servo_group.match_demand(
             get_servo_demand(sw_states, switch_servos))
         print(settings)
+        gc.collect()  # while not busy
         await asyncio.sleep_ms(1_000)
 
     

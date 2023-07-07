@@ -53,11 +53,12 @@ class ServoSG9x:
         self.x_inc = 1
         self.x_steps = 100
         self.step_ms = self.transition_ms // self.x_steps
+        self.pw_off_on_inc = (self.on_ns - self.off_ns) // self.x_steps
+        self.pw_on_off_inc = -self.pw_off_on_inc
 
     def degrees_to_ns(self, degrees):
         """ convert float degrees to int pulse-width ns """
         absolute_degrees = degrees - self.DEG_MIN
-        print(absolute_degrees)
         return int(self.PW_MIN
                    + absolute_degrees * self.NS_PER_DEGREE)
     
@@ -72,18 +73,17 @@ class ServoSG9x:
     def move_servo(self, pw_):
         """ servo machine.PWM setting method """
         # guard against out-of-range demands
-        # ? remove guard following testing ?
         if self.PW_MIN <= pw_ <= self.PW_MAX:
             self.pwm.duty_ns(pw_)
 
     def set_off(self):
-        """ set servo direct to off position """
+        """ move servo direct to off position """
         self.move_servo(self.off_ns)
         self.pw_ns = self.off_ns
         self.state = self.OFF
 
     def set_on(self):
-        """ set servo direct to on position """
+        """ move servo direct to on position """
         self.move_servo(self.on_ns)
         self.pw_ns = self.on_ns
         self.state = self.ON
@@ -96,15 +96,17 @@ class ServoSG9x:
         """ turn off PWM output """
         self.pwm.duty_ns(0)
 
-    async def transition(self, pw, pw_inc, steps_, step_ms):
+    async def transition(self, pw, pw_inc):
         """ move servo in linear steps with step_ms pause """
-        for _ in range(steps_):
+        pause = self.step_ms
+        for _ in range(self.x_steps):
             pw += pw_inc
             self.move_servo(pw)
-            await asyncio.sleep_ms(step_ms)
+            await asyncio.sleep_ms(pause)
 
     async def set_servo_state(self, demand_):
-        """ set servo to demand position off or on """
+        """ move servo from pw_ns to demand position """
+        # generalised method for any starting pulse-width
         # set parameters
         if demand_ == self.state:
             return
@@ -118,15 +120,35 @@ class ServoSG9x:
             return
         # move servo
         self.activate_pulse()
-        await self.transition(
-            self.pw_ns, pw_inc, self.x_steps, self.step_ms)
-        # final pause for servo transition - necessary?
-        await asyncio.sleep_ms(200)
+        await self.transition( self.pw_ns, pw_inc)
         self.zero_pulse()
         # save final state for next move
         self.pw_ns = final_ns
         self.state = demand_
-        return self.state
+        return self.state  # for testing
+
+    async def set_servo_on_off(self, demand_):
+        """ move servo between off and on positions """
+        # move servo between off and on pulse-widths
+        # set parameters
+        if demand_ == self.state:
+            return
+        elif demand_ == self.OFF:
+            pw_inc = self.pw_on_off_inc
+            final_ns = self.off_ns
+        elif demand_ == self.ON:
+            pw_inc = self.pw_off_on_inc
+            final_ns = self.on_ns
+        else:
+            return
+        # move servo
+        self.activate_pulse()
+        await self.transition(self.pw_ns, pw_inc)
+        self.zero_pulse()
+        # save final state for next move
+        self.pw_ns = final_ns
+        self.state = demand_
+        return self.state  # for testing
 
 
 class ServoGroup:
@@ -160,10 +182,20 @@ class ServoGroup:
         tasks = self.tasks
         for i, srv_pin in enumerate(demand):
             servo_ = self.servos[srv_pin]
-            tasks[i] = servo_.set_servo_state(demand[srv_pin])
+            # coros will not run until awaited
+            tasks[i] = servo_.set_servo_on_off(demand[srv_pin])
+
+        # code for 'concurrent' setting
         result = await asyncio.gather(*tasks)
-        # for testing
-        return result
+
+        """
+        # code for sequential setting
+        result = []
+        for task in tasks:
+            result.append(await task)
+        """
+
+        return result  # for testing
 
 
 async def main():
@@ -178,8 +210,6 @@ async def main():
             for servo_pin_ in switch_servos_[sw_pin_]:
                 servo_demand[servo_pin_] = demand_
         return servo_demand
-
-    print('In main()')
 
     # switch states in standard interface dict format
     # switch test states include no-change values
@@ -222,7 +252,7 @@ async def main():
         settings = await servo_group.match_demand(
             get_servo_demand(sw_states, switch_servos))
         print(settings)
-        await asyncio.sleep_ms(2_000)
+        await asyncio.sleep_ms(1_000)
 
     
 if __name__ == '__main__':

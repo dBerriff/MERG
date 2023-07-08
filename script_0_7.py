@@ -76,13 +76,13 @@ class ServoSG9x:
 
     def set_off(self):
         """ move servo direct to off position """
-        self.move_servo(self.off_ns)
+        self.pwm.duty_ns(self.off_ns)
         self.pw_ns = self.off_ns
         self.state = self.OFF
 
     def set_on(self):
         """ move servo direct to on position """
-        self.move_servo(self.on_ns)
+        self.pwm.duty_ns(self.on_ns)
         self.pw_ns = self.on_ns
         self.state = self.ON
 

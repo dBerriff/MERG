@@ -44,32 +44,33 @@ class Button:
     """ button with press and hold states """
     
     action_dict = {0: 'none', 1: 'press', 2: 'hold'}
+    hold_threshold = 750  # ms
 
     def __init__(self, pin):
         self.pin = pin
         self.sw = HwSwitch(pin)
         self.action = 0
         self.button_ev = asyncio.Event()
+        self.run = True
 
     async def poll_button(self):
         """ poll button for press and hold events """
-        hold_threshold = 500  # ms
-        on_time = None
+        on_time = 0
         prev_state = 0
-        while True:
-            current_state = self.sw.get_state()
+        while self.run:
+            state = self.sw.get_state()
             current_time = ticks_ms()
-            if current_state != prev_state:
-                if current_state == 0:
+            if state != prev_state:
+                if state == 0:
                     hold_time = ticks_diff(current_time, on_time)
-                    if hold_time < hold_threshold:
+                    if hold_time < self.hold_threshold:
                         self.action = 1
                     else:
                         self.action = 2
                     self.button_ev.set()
-                elif current_state == 1:
+                else:
                     on_time = current_time
-                prev_state = current_state
+                prev_state = state
             await asyncio.sleep_ms(20)
 
     async def button_event(self):
@@ -80,8 +81,9 @@ class Button:
             await self.button_ev.wait()
             self.button_ev.clear()
             self.print_action()
+            if self.pin == 22 and self.action == 2:
+                self.run = False
 
-    
     def print_action(self):
         """ print last button action """
         print(
@@ -93,8 +95,14 @@ async def main():
     print('In main()')
     
     button_20 = Button(20)
+    button_21 = Button(21)
+    button_22 = Button(22)
     asyncio.create_task(button_20.button_event())
-    await button_20.poll_button()
+    asyncio.create_task(button_20.poll_button())
+    asyncio.create_task(button_21.button_event())
+    asyncio.create_task(button_21.poll_button())
+    asyncio.create_task(button_22.button_event())
+    await asyncio.create_task(button_22.poll_button())
 
 if __name__ == '__main__':
     try:

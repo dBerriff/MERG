@@ -1,5 +1,6 @@
 """
     set servos from hardware switch input
+    N.B. Demonstration code: prioritises clarity before efficiency
     - servos are set asynchronously
 """
 

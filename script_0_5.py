@@ -1,6 +1,6 @@
 """
     set servos from switch input
-    N.B. NOT FINAL CODE
+    N.B. Demonstration code: prioritises clarity before efficiency
     - servos are set sequentially
 """
 

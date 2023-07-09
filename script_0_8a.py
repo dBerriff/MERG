@@ -1,5 +1,6 @@
 """
     set servos from hardware switch input
+    N.B. Demonstration code: prioritises clarity before efficiency
     - hardware switch de-bounce
     - servos are set asynchronously
 """

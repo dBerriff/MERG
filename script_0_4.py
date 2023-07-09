@@ -1,6 +1,6 @@
 """
     GPIO switch input and servo control
-    N.B. NOT FINAL CODE
+    N.B. Demonstration code: prioritises clarity before efficiency
     - non-asyncio: servos must be set sequentially
 """
 

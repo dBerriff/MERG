@@ -9,6 +9,7 @@ import uasyncio as asyncio
 from machine import Pin
 from micropython import const
 from script_0_7 import ServoGroup
+from time import ticks_ms, ticks_diff
 
 
 class HwSwitch:

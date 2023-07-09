@@ -52,9 +52,8 @@ class ServoSG9x:
         self.state = None
         # set servo transition parameters
         self.x_steps = 100
-        self.step_ms = self.transition_ms // self.x_steps
-        self.pw_off_on_inc = (self.on_ns - self.off_ns) // self.x_steps
-        self.pw_on_off_inc = -self.pw_off_on_inc
+        self._step_ms = self.transition_ms // self.x_steps
+        self._pw_off_on_inc = (self.on_ns - self.off_ns) // self.x_steps
 
     def degrees_to_ns(self, degrees):
         """ convert float degrees to int pulse-width ns """
@@ -71,19 +70,19 @@ class ServoSG9x:
 
     def set_off(self):
         """ move direct to off position; set object attributes """
-        self.move_servo(self.off_ns)
+        self.pwm.duty_ns(self.off_ns)
         self.pw_ns = self.off_ns
         self.state = self.OFF
 
     def set_on(self):
         """ move direct to on position; set object attributes """
-        self.move_servo(self.on_ns)
+        self.pwm.duty_ns(self.on_ns)
         self.pw_ns = self.on_ns
         self.state = self.ON
 
     def activate_pulse(self):
         """ turn on PWM output """
-        self.move_servo(self.pw_ns)
+        self.pwm.duty_ns(self.pw_ns)
 
     def zero_pulse(self):
         """ turn off PWM output """
@@ -91,39 +90,40 @@ class ServoSG9x:
 
     async def transition(self, pw, pw_inc, pw_final):
         """ move servo in linear steps with step_ms pause """
-        pause = self.step_ms
+        pause = self._step_ms
         for _ in range(self.x_steps):
             pw += pw_inc
             self.pwm.duty_ns(pw)
             await asyncio.sleep_ms(pause)
-        # optional: minimise final, cumulative error
-        # self.pwm.duty_ns(pw_final)
-        # await asyncio.sleep_ms(pause)
-        return pw - pw_final  # pw error for analysis
+        return pw
 
     async def set_servo_on_off(self, demand_state):
         """ move servo between off and on positions """
-        # move servo between off and on pulse-widths
+
+        def print_error(ns_, demand_ns):
+            """ testing: print final pulse-width error """
+            # check on final setting error as percentage
+            error_pc = (ns_ - demand_ns) / demand_ns * 100
+            print(f'{self.pin}: pw setting error: {error_pc:.2f}%')
+
         # set parameters
         if demand_state == self.state:
             return
         elif demand_state == self.OFF:
-            inc_ns = self.pw_on_off_inc
-            final_ns = self.off_ns
+            inc_ns = -self._pw_off_on_inc
+            demand_ns = self.off_ns
         elif demand_state == self.ON:
-            inc_ns = self.pw_off_on_inc
-            final_ns = self.on_ns
+            inc_ns = self._pw_off_on_inc
+            demand_ns = self.on_ns
         else:
             return
         # move servo
         self.activate_pulse()
-        error_ns = await self.transition(self.pw_ns, inc_ns, final_ns)
-        # check on final setting error as percentage
-        error_pc = error_ns / final_ns * 100
-        print(f'{self.pin}: pw setting error: {error_pc:.2f}%')
+        pw_ns = await self.transition(self.pw_ns, inc_ns, demand_ns)
+        # print_error(pw_ns, demand_ns)
         self.zero_pulse()
         # save final state for next move
-        self.pw_ns = final_ns
+        self.pw_ns = demand_ns
         self.state = demand_state
         return self.state  # for testing
 

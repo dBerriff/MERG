@@ -38,18 +38,19 @@ class LedOut:
 
 
 class HwSwitchGroup:
-    """ instantiate a group of HwSwitch objects """
+    """ group of HwSwitch objects """
 
     def __init__(self, switch_pins_):
+        self.pins = switch_pins_
         self.switches = {pin: HwSwitch(pin) for pin in switch_pins_}
         self.n_switches = len(switch_pins_)
-        self.pins = switch_pins_
-        self._states = {pin: 0 for pin in self.pins}
+        self._states = {pin: 0 for pin in switch_pins_}
 
     def get_states(self):
-        """ poll switch states """
+        """ scan switch states """
         self._states = {
-            pin: self.switches[pin].get_state() for pin in self.pins}
+            pin: self.switches[pin].get_state() for pin in self.pins
+        }
         return self._states
 
     def print_states(self):

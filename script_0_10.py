@@ -5,71 +5,35 @@ from micropython import const
 from time import ticks_ms, ticks_diff
 
 
-class HwSwitch:
-    """
-        input pin class for hardware switch or button
-        - Pull.UP logic value(): 1 for switch open, 0 for switch closed
-        - get_state() method returns: 0 for off (open), 1 for on (closed)
-          inverts pull-up logic
-    """
-
-    n_readings = const(3)
-    n_pauses = const(n_readings - 1)
-    db_pause = const(20 // n_pauses)  # de-bounce over approx 20ms
-
-    def __init__(self, pin):
-        self.pin = pin  # for diagnostics
-        self._hw_in = Pin(pin, Pin.IN, Pin.PULL_UP)
-        self.readings = [1] * self.n_readings
-
-    def get_state(self):
-        """ get switch state; returns 0 (off) or 1 (on) """
-        return 0 if self._hw_in.value() == 1 else 1
-
-    async def get_state_db(self):
-        """ coro: get switch state with simple de-bounce
-            - returns 0 (off) or 1 (on)
-            - take n_readings over 20ms
-        """
-        value = self._hw_in.value
-        readings = self.readings
-        for i in range(self.n_pauses):
-            readings[i] = value()
-            await asyncio.sleep_ms(self.db_pause)
-        readings[self.n_pauses] = value()
-        return 0 if any(readings) else 1
-
-
 class Button:
     """ button with press and hold states """
     
     action_dict = {0: 'none', 1: 'press', 2: 'hold'}
-    hold_threshold = 750  # ms
+    hold_t = 750  # ms
 
     def __init__(self, pin):
         self.pin = pin
-        self.sw = HwSwitch(pin)
+        self._hw_in = Pin(pin, Pin.IN, Pin.PULL_UP)
         self.action = 0
         self.button_ev = asyncio.Event()
         self.run = True
 
-    async def poll_button(self):
+    async def poll_input(self):
         """ poll button for press and hold events """
         on_time = 0
         prev_state = 0
         while self.run:
-            state = self.sw.get_state()
-            current_time = ticks_ms()
+            state = 0 if self._hw_in.value() == 1 else 1
             if state != prev_state:
+                time_ = ticks_ms()
                 if state == 0:
-                    hold_time = ticks_diff(current_time, on_time)
-                    if hold_time < self.hold_threshold:
+                    if ticks_diff(time_, on_time) < self.hold_t:
                         self.action = 1
                     else:
                         self.action = 2
                     self.button_ev.set()
                 else:
-                    on_time = current_time
+                    on_time = time_
                 prev_state = state
             await asyncio.sleep_ms(20)
 
@@ -88,21 +52,43 @@ class Button:
         """ print last button action """
         print(
             f'Button: {self.pin}: {self.action_dict[self.action]}')
-            
+
+
+class ButtonGroup:
+    """ group of Button objects """
+
+    def __init__(self, button_pins_):
+        self.pins = button_pins_
+        self.buttons = {pin: Button(pin) for pin in button_pins_}
+        self.n_buttons = len(button_pins_)
+        self.states = {pin: 0 for pin in button_pins_}
+
+    def get_states(self):
+        """ scan button states """
+        for pin in self.pins:
+            self.states[pin] = self.buttons[pin].action
+            self.buttons[pin].action = 0
+        return self.states
+    
+    def clear_states(self):
+        """ set all button states to 0 """
+        for pin in self.pins:
+            self.states[pin] = 0
+
 
 async def main():
     """ test button input """
     print('In main()')
     
-    button_20 = Button(20)
-    button_21 = Button(21)
-    button_22 = Button(22)
-    asyncio.create_task(button_20.button_event())
-    asyncio.create_task(button_20.poll_button())
-    asyncio.create_task(button_21.button_event())
-    asyncio.create_task(button_21.poll_button())
-    asyncio.create_task(button_22.button_event())
-    await asyncio.create_task(button_22.poll_button())
+    btn_group = ButtonGroup([20, 21, 22])
+    for pin in btn_group.pins:    
+        asyncio.create_task(btn_group.buttons[pin].button_event())
+        asyncio.create_task(btn_group.buttons[pin].poll_input())
+    while True:
+        btn_group.clear_states()
+        states = btn_group.get_states()
+        print(states)
+        await asyncio.sleep_ms(1_000)
 
 if __name__ == '__main__':
     try:

@@ -33,7 +33,7 @@ class Button:
                         action = 1
                     else:
                         action = 2
-                    self.out_queue.add_item((self.id, action))
+                    self.out_queue.add_item(self.id, action)
                     self.button_ev.set()
                 else:
                     on_time = time_
@@ -41,37 +41,42 @@ class Button:
             await asyncio.sleep_ms(20)
 
 
-class Queue:
-    """ simple FIFO list as queue
+class QueueKV:
+    """ simple FIFO lists as queue of keys and values
         - is_data and is_space Event.is_set() controls access
         - events should be set within tasks, hence coros.
     """
 
     def __init__(self, max_len=16):
         self.max_len = max_len
-        self.q = [None] * max_len
+        self.q_key = [0] * max_len
+        self.q_val = [0] * max_len
         self.head = 0
         self.next = 0
         self.is_data = asyncio.Event()
         self.is_space = asyncio.Event()
         self.is_space.set()
 
-    def add_item(self, item):
+    def add_item(self, key, val):
         """ add item to the queue """
-        self.q[self.next] = item
-        self.next = (self.next + 1) % self.max_len
+        next_ = self.next
+        self.q_key[next_] = key
+        self.q_val[next_] = val
+        self.next = (next_ + 1) % self.max_len
         if self.next == self.head:
             self.is_space.clear()
         self.is_data.set()
 
     def pop_item(self):
         """ remove item from the queue """
-        item = self.q[self.head]
-        self.head = (self.head + 1) % self.max_len
+        head_ = self.head
+        key = self.q_key[head_]
+        val = self.q_val[head_]
+        self.head = (head_ + 1) % self.max_len
         if self.head == self.next:
             self.is_data.clear()
         self.is_space.set()
-        return item
+        return key, val
 
     @property
     def q_len(self):
@@ -87,9 +92,7 @@ class Queue:
 
 
 async def button_event(q_in):
-    """ respond to button event
-        - clear event
-    """
+    """ respond to queued button events """
     while True:
         await q_in.is_data.wait()
         item = q_in.pop_item()
@@ -99,7 +102,7 @@ async def button_event(q_in):
 async def main():
     """ test button input """
     print('In main()')
-    queue = Queue()
+    queue = QueueKV()
     btn_group = tuple([Button(pin, queue) for pin in [20, 21, 22]])
     print(btn_group)
     for button in btn_group:    

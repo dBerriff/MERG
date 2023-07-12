@@ -7,76 +7,74 @@ from time import ticks_ms, ticks_diff
 class Button:
     """ button with press and hold states """
     
+    # class variable: unique object id
     _id = 0
     
     action_dict = {0: 'none', 1: 'press', 2: 'hold'}
     hold_t = 750  # ms
 
     def __init__(self, pin, out_queue):
-        self.pin = pin  # for diagnostics
-        self.out_queue = out_queue
-        self.id = Button._id
-        Button._id += 1
         self._hw_in = Pin(pin, Pin.IN, Pin.PULL_UP)
+        self.out_queue = out_queue
+        self.id = Button._id  # identify event source
+        Button._id += 1
         self.button_ev = asyncio.Event()
 
     async def poll_input(self):
-        """ poll button for press and hold events """
+        """ poll button for press or hold events """
         on_time = 0
-        prev_state = 0
+        prev_state = 1  # button off; pull-up logic
         while True:
-            state = 0 if self._hw_in.value() == 1 else 1
+            state = self._hw_in.value()
             if state != prev_state:
-                time_ = ticks_ms()
-                if state == 0:
-                    if ticks_diff(time_, on_time) < self.hold_t:
+                time_stamp = ticks_ms()
+                if state == 1:
+                    if ticks_diff(time_stamp, on_time) < Button.hold_t:
                         action = 1
                     else:
                         action = 2
-                    self.out_queue.add_item(self.id, action)
+                    await self.out_queue.add((self.id, action))
                     self.button_ev.set()
                 else:
-                    on_time = time_
+                    on_time = time_stamp
                 prev_state = state
             await asyncio.sleep_ms(20)
 
 
 class QueueKV:
     """ simple FIFO lists as queue of keys and values
-        - is_data and is_space Event.is_set() controls access
-        - events should be set within tasks, hence coros.
+        - is_data and is_space events control access
+        - Event.set() "must be called from within a task",
+            hence coros.
     """
 
-    def __init__(self, max_len=16):
+    def __init__(self, max_len=16, null_item=0):
         self.max_len = max_len
-        self.q_key = [0] * max_len
-        self.q_val = [0] * max_len
+        self.queue = [null_item] * max_len
         self.head = 0
         self.next = 0
         self.is_data = asyncio.Event()
         self.is_space = asyncio.Event()
         self.is_space.set()
 
-    def add_item(self, key, val):
+    async def add(self, item):
         """ add item to the queue """
         next_ = self.next
-        self.q_key[next_] = key
-        self.q_val[next_] = val
+        self.queue[next_] = item
         self.next = (next_ + 1) % self.max_len
         if self.next == self.head:
             self.is_space.clear()
         self.is_data.set()
 
-    def pop_item(self):
+    async def pop(self):
         """ remove item from the queue """
         head_ = self.head
-        key = self.q_key[head_]
-        val = self.q_val[head_]
+        item = self.queue[head_]
         self.head = (head_ + 1) % self.max_len
         if self.head == self.next:
             self.is_data.clear()
         self.is_space.set()
-        return key, val
+        return item
 
     @property
     def q_len(self):
@@ -90,25 +88,34 @@ class QueueKV:
             n = (self.next - self.head) % self.max_len
         return n
 
+    def q_dump(self):
+        """ print of all queue items """
+        for i in range(self.max_len):
+            print(self.queue[i])
+
 
 async def button_event(q_in):
     """ respond to queued button events """
-    while True:
+    run = True
+    while run:
         await q_in.is_data.wait()
-        item = q_in.pop_item()
-        print(f'button input: {item}')
+        item = await q_in.pop()
+        key, value = item
+        print(f'button: {key} value: {value}')
+        if item == (2, 2):
+            run = False
 
 
 async def main():
     """ test button input """
     print('In main()')
-    queue = QueueKV()
+    queue = QueueKV(null_item=(0, 0))
     btn_group = tuple([Button(pin, queue) for pin in [20, 21, 22]])
     print(btn_group)
     for button in btn_group:    
         asyncio.create_task(button.poll_input())
-    while True:
-        await button_event(queue)
+    await button_event(queue)
+    queue.q_dump()
 
 if __name__ == '__main__':
     try:

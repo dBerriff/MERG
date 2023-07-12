@@ -2,6 +2,7 @@
     set servos from test values for switch input
     N.B. Demonstration code: prioritises clarity before efficiency
     - servos are set asynchronously
+    - use object ids rather than pins as keys
 """
 
 import uasyncio as asyncio  # cooperative multitasking
@@ -17,6 +18,8 @@ class ServoSG9x:
           (servos usually specified by pulse-width)
     """
 
+    _id = 0  # unique id for each servo
+    
     # SG90 servos specify f = 50Hz
     FREQ = const(50)  # Hz
 
@@ -24,16 +27,13 @@ class ServoSG9x:
     # (45 to 135 degrees should be used in practice)
     # corresponding specified pulse widths: 500_000 to 2_500_000 ns
     PW_CTR = const(1_500_000)
-    # set more restrictive values if appropriate
     PW_MIN = const(500_000)  # ns
     PW_MAX = const(2_500_000)  # ns
-    # degrees can be offset if preferred
-    DEG_MIN = const(0)
+    DEG_MIN = const(0)  # degrees can be offset
     DEG_MAX = const(180)
 
-    # conversion factor ns per degree
     NS_PER_DEGREE = const((PW_MAX - PW_MIN) // (DEG_MAX - DEG_MIN))
-    # demand states
+
     OFF = const(0)
     ON = const(1)
 
@@ -42,15 +42,18 @@ class ServoSG9x:
     SET_WAIT = const(500)  # ms
 
     def __init__(self, pin, off_deg, on_deg, transition_time=1.0):
-        self.pin = pin  # for diagnostics
+        self.pwm = PWM(Pin(pin))
+        self.pwm.freq(self.FREQ)
         self.off_ns = self.degrees_to_ns(off_deg)
         self.on_ns = self.degrees_to_ns(on_deg)
         self.transition_ms = int(transition_time * 1000)
-        self.pwm = PWM(Pin(pin))
-        self.pwm.freq(self.FREQ)
-        self.pw_ns = None  # for self.activate_pulse()
+
+        self.id = ServoSG9x._id
+        ServoSG9x._id += 1
+
+        self.pw_ns = None
         self.state = None
-        # set servo transition parameters
+
         self.x_steps = 100
         self._step_ms = self.transition_ms // self.x_steps
         self._pw_off_on_inc = (self.on_ns - self.off_ns) // self.x_steps
@@ -61,12 +64,6 @@ class ServoSG9x:
             return self.PW_CTR
         return int(self.PW_MIN
                    + (degrees - self.DEG_MIN) * self.NS_PER_DEGREE)
-
-    def move_servo(self, pw_):
-        """ servo machine.PWM setting method """
-        # guard against out-of-range demands
-        if self.PW_MIN <= pw_ <= self.PW_MAX:
-            self.pwm.duty_ns(pw_)
 
     def set_off(self):
         """ move direct to off position; set object attributes """
@@ -88,7 +85,7 @@ class ServoSG9x:
         """ turn off PWM output """
         self.pwm.duty_ns(0)
 
-    async def transition(self, pw, pw_inc, pw_final):
+    async def transition(self, pw, pw_inc):
         """ move servo in linear steps with step_ms pause """
         pause = self._step_ms
         for _ in range(self.x_steps):
@@ -100,11 +97,10 @@ class ServoSG9x:
     async def set_servo_on_off(self, demand_state):
         """ move servo between off and on positions """
 
-        def print_error(ns_, demand_ns):
-            """ testing: print final pulse-width error """
-            # check on final setting error as percentage
-            error_pc = (ns_ - demand_ns) / demand_ns * 100
-            print(f'{self.pin}: pw setting error: {error_pc:.2f}%')
+        def error_pc_str(ns_, demand_ns_):
+            """ testing: return final pulse-width error as % """
+            error_pc = (ns_ - demand_ns_) / demand_ns_ * 100
+            return f'{self.id}: pw setting error: {error_pc:.2f}%'
 
         # set parameters
         if demand_state == self.state:
@@ -119,8 +115,8 @@ class ServoSG9x:
             return
         # move servo
         self.activate_pulse()
-        pw_ns = await self.transition(self.pw_ns, inc_ns, demand_ns)
-        # print_error(pw_ns, demand_ns)
+        transition_ns = await self.transition(self.pw_ns, inc_ns)
+        print(error_pc_str(transition_ns, demand_ns))
         self.zero_pulse()
         # save final state for next move
         self.pw_ns = demand_ns
@@ -129,110 +125,98 @@ class ServoSG9x:
 
 
 class ServoGroup:
-    """ create a dictionary of servo objects for servo control
-        - pin_number: servo-object
+    """ create a list of servo objects for servo control
+        - index: servo-object
         - switch_servos_ binds each servo to a specific switch input
     """
 
-    def __init__(self, servo_parameters):
-        self.servos = {pin: ServoSG9x(pin, *servo_parameters[pin])
-                       for pin in servo_parameters}
-        self.tasks = [None] * len(self.servos)  # [None, None, ...]
+    def __init__(self, servo_pins, servo_parameters):
+        self.servos = []
+        self.id_servo = {}
+        self.id_pin = {}
+        for i, pin in enumerate(servo_pins):
+            servo = ServoSG9x(pin, *servo_parameters[i])
+            self.servos.append(servo)
+            self.id_servo[servo.id] = servo
+            self.id_pin[servo.id] = pin  # for diagnostics
+        print(self.servos)
+        print(self.id_servo)
+        print(self.id_pin)
 
-    def initialise(self, servo_init_: dict):
-        """ initialise servos by servo_init dict
+    def initialise(self, servo_init_):
+        """ initialise servos by servo_init list
             - allows for reading initial states from file
             - set sequentially: avoid start-up current spike?
         """
-        for servo in self.servos.values():
-            pin = servo.pin
-            if pin in servo_init_ and servo_init_[pin] == 1:
+        for i, setting in enumerate(servo_init_):
+            servo = self.servos[i]
+            if setting == 1:
                 servo.set_on()
             else:
                 servo.set_off()
             sleep_ms(500)  # allow movement time
             servo.zero_pulse()
 
-    async def match_demand(self, demand: dict):
+    async def match_demand(self, demand):
         """ coro: move each servo to match switch demands """
-        # assign tasks elements: avoid creating new list each call
-        tasks = self.tasks
-        for i, srv_pin in enumerate(demand):
-            servo_ = self.servos[srv_pin]
-            # coros will not run until awaited
-            tasks[i] = servo_.set_servo_on_off(demand[srv_pin])
+        tasks = []
+        for id_, setting in demand.items():
+            tasks.append(
+                self.id_servo[id_].set_servo_on_off(setting))
         result = await asyncio.gather(*tasks)
         return result  # for testing
 
 
 async def main():
-    """ test servo operation from pre-set "switch" values """
+    """ test servo operation by applying pre-set demand values """
     print('In main()')
-    
-    def dict_str(dictionary):
-        """ build dict string with sorted keys
-            - MicroPython dicts are not sorted
-
-        """
-        keys = list(dictionary.keys())
-        keys.sort()
-        d_str = '{'
-        for key in keys:
-            d_str += f'{key}: {dictionary[key]}, '
-        d_str = d_str[:-2] + '}'  # remove final ', '
-        return d_str
 
     def get_servo_demand(sw_states_, switch_servos_):
         """ return dict of servo setting demands """
         servo_demand = {}
-        for sw_pin_ in sw_states_:
-            demand_ = sw_states_[sw_pin_]
-            for servo_pin_ in switch_servos_[sw_pin_]:
-                servo_demand[servo_pin_] = demand_
+        for i, sw_demand in enumerate(sw_states_):
+            for servo_index in switch_servos_[i]:
+                servo_demand[servo_index] = sw_demand
         return servo_demand
 
-    # switch states in standard interface dict format
+    # switch states by switch id
     # switch test states include no-change values
-    test_sw_states = ({16: 0, 17: 0, 18: 0},
-                      {16: 1, 17: 1, 18: 1},
-                      {16: 0, 17: 0, 18: 0},
-                      {16: 1, 17: 1, 18: 1},
-                      {16: 0, 17: 0, 18: 0},
-                      {16: 0, 17: 0, 18: 0},
-                      {16: 1, 17: 1, 18: 1},
-                      {16: 0, 17: 0, 18: 0})
+    test_sw_states = ([0, 0, 0],
+                      [1, 1, 1],
+                      [0, 0, 0],
+                      [1, 1, 1],
+                      [0, 0, 0],
+                      [0, 0, 0],
+                      [1, 1, 1],
+                      [0, 0, 0]
+                      )
 
     # === switch and servo parameters
+    
+    servo_pins = (0, 1, 2, 3)
+    
+    servo_params = ([45, 135], [135, 45], [45, 135], [45, 135])
 
-    # switch_pins = (16, 17, 18)
-
-    # {pin: (off_deg, on_deg)}
-    servo_params = {0: [45, 135],
-                    1: [135, 45],
-                    2: [45, 135],
-                    3: [45, 135]
-                    }
-
-    servo_init = {0: 0, 1: 0, 2: 1, 3: 1}
+    servo_init = (0, 0, 1, 1)
 
     # {switch-pin: (servo-pin, ...), ...}
-    switch_servos = {16: [0, 1],
-                     17: [2],
-                     18: [3]
+    switch_servos = {0: [0, 1],
+                     1: [2],
+                     2: [3]
                      }
 
     # === end of parameters
 
-    servo_group = ServoGroup(servo_params)
+    servo_group = ServoGroup(servo_pins, servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')
     print('run switch-input test...')
     for sw_states in test_sw_states:
         print()
-        print(dict_str(sw_states))
-        settings = await servo_group.match_demand(
-            get_servo_demand(sw_states, switch_servos))
+        demand = get_servo_demand(sw_states, switch_servos)
+        print(demand)
+        settings = await servo_group.match_demand(demand)
         print(settings)
         gc.collect()  # garbage collect while not busy
         sleep_ms(2_000)  # simulate operations pause

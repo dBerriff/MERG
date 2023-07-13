@@ -1,6 +1,7 @@
 """ develop button input """
 import uasyncio as asyncio
 from machine import Pin
+import array
 from time import ticks_ms, ticks_diff
 
 
@@ -29,28 +30,28 @@ class Button:
             if state != prev_state:
                 time_stamp = ticks_ms()
                 if state == 1:
+                    btn_data = self.id << 2  # 2-bit shift for event data
                     if ticks_diff(time_stamp, on_time) < Button.hold_t:
-                        action = 1
+                        btn_data += 1  # click
                     else:
-                        action = 2
-                    await self.out_queue.add((self.id, action))
-                    self.button_ev.set()
+                        btn_data += 2  # hold
+                    await self.out_queue.add(btn_data)
                 else:
                     on_time = time_stamp
                 prev_state = state
             await asyncio.sleep_ms(20)
 
 
-class QueueKV:
+class Queue:
     """ simple FIFO lists as queue of keys and values
         - is_data and is_space events control access
         - Event.set() "must be called from within a task",
             hence coros.
     """
 
-    def __init__(self, max_len=16, null_item=0):
+    def __init__(self, max_len=16):
         self.max_len = max_len
-        self.queue = [null_item] * max_len
+        self.queue = array.array('B', [0] * max_len)
         self.head = 0
         self.next = 0
         self.is_data = asyncio.Event()
@@ -89,7 +90,7 @@ class QueueKV:
         return n
 
     def q_dump(self):
-        """ print of all queue items """
+        """ print out all queue-item values """
         for i in range(self.max_len):
             print(self.queue[i])
 
@@ -99,23 +100,23 @@ async def button_event(q_in):
     run = True
     while run:
         await q_in.is_data.wait()
-        item = await q_in.pop()
-        key, value = item
-        print(f'button: {key} value: {value}')
-        if item == (2, 2):
+        btn_data = await q_in.pop()
+        btn_event = btn_data & 0b11  # bitwise AND
+        btn_id = btn_data >> 2
+        print(f'button: {btn_id} value: {btn_event}')
+        if btn_id == 2 and btn_event == 2:
             run = False
-
+        
 
 async def main():
     """ test button input """
     print('In main()')
-    queue = QueueKV(null_item=(0, 0))
+    queue = Queue()
     btn_group = tuple([Button(pin, queue) for pin in [20, 21, 22]])
     print(btn_group)
     for button in btn_group:    
         asyncio.create_task(button.poll_input())
     await button_event(queue)
-    queue.q_dump()
 
 if __name__ == '__main__':
     try:

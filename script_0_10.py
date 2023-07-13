@@ -1,4 +1,10 @@
-""" develop button input """
+""" asyncio button input
+    - poll buttons and add button press or hold action to a queue
+    - identify buttons by unique ID rather than pin number
+    - button_ev Event is set when data is added to the queue
+    - events are set on button release
+    - Queue uses the array class for efficiency
+"""
 import uasyncio as asyncio
 from machine import Pin
 import array
@@ -11,7 +17,7 @@ class Button:
     # class variable: unique object id
     _id = 0
     
-    action_dict = {0: 'none', 1: 'press', 2: 'hold'}
+    # action_dict = {0: 'none', 1: 'click', 2: 'hold'}
     hold_t = 750  # ms
 
     def __init__(self, pin, out_queue):
@@ -35,6 +41,7 @@ class Button:
                         btn_data += 1  # click
                     else:
                         btn_data += 2  # hold
+                    await self.out_queue.is_space.wait()  # queue full?
                     await self.out_queue.add(btn_data)
                 else:
                     on_time = time_stamp
@@ -43,7 +50,7 @@ class Button:
 
 
 class Queue:
-    """ simple FIFO lists as queue of keys and values
+    """ simple FIFO array as queue of keys and values
         - is_data and is_space events control access
         - Event.set() "must be called from within a task",
             hence coros.
@@ -51,7 +58,7 @@ class Queue:
 
     def __init__(self, max_len=16):
         self.max_len = max_len
-        self.queue = array.array('B', [0] * max_len)
+        self.queue = array.array('B', [0] * max_len)  # unsigned single-byte integer
         self.head = 0
         self.next = 0
         self.is_data = asyncio.Event()
@@ -62,18 +69,20 @@ class Queue:
         """ add item to the queue """
         next_ = self.next
         self.queue[next_] = item
-        self.next = (next_ + 1) % self.max_len
-        if self.next == self.head:
+        next_ = (next_ + 1) % self.max_len
+        if next_ == self.head:
             self.is_space.clear()
+        self.next = next_
         self.is_data.set()
 
     async def pop(self):
         """ remove item from the queue """
         head_ = self.head
         item = self.queue[head_]
-        self.head = (head_ + 1) % self.max_len
-        if self.head == self.next:
+        head_ = (head_ + 1) % self.max_len
+        if head_ == self.next:
             self.is_data.clear()
+        self.head = head_
         self.is_space.set()
         return item
 
@@ -89,10 +98,14 @@ class Queue:
             n = (self.next - self.head) % self.max_len
         return n
 
-    def q_dump(self):
+    def q_print(self):
         """ print out all queue-item values """
+        print(f'head: {self.head}; next: {self.next}')
+        q_str = '['
         for i in range(self.max_len):
-            print(self.queue[i])
+            q_str += f'{self.queue[i]}, '
+        q_str = q_str[:-2] + ']'
+        print(q_str)
 
 
 async def button_event(q_in):
@@ -112,11 +125,13 @@ async def main():
     """ test button input """
     print('In main()')
     queue = Queue()
-    btn_group = tuple([Button(pin, queue) for pin in [20, 21, 22]])
+    btn_group = tuple(
+        [Button(pin, queue) for pin in [20, 21, 22]])
     print(btn_group)
     for button in btn_group:    
         asyncio.create_task(button.poll_input())
     await button_event(queue)
+    queue.q_print()
 
 if __name__ == '__main__':
     try:

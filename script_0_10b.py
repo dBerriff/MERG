@@ -11,6 +11,18 @@ import array
 from time import ticks_ms, ticks_diff
 
 
+def encode_id_data(id_, data):
+    """ encode id and event as single byte
+        - 0: none; 1: click; 2: hold
+    """
+    return (id_ << 2) + data
+
+
+def decode_id_data(info_byte):
+    """ return id, event """
+    return info_byte >> 2, info_byte & 0b11
+
+
 class Button:
     """ button with press and hold states """
     
@@ -42,9 +54,7 @@ class Button:
                     hold_t = ticks_diff(time_stamp, on_time)
                     event = 1 if hold_t < Button.hold_t else 2
                     await self.out_queue.is_space.wait()  # space in queue?
-                    await self.out_queue.add(self.id)
-                    await self.out_queue.is_space.wait()  # space in queue?
-                    await self.out_queue.add(event)
+                    await self.out_queue.add(encode_id_data(self.id, event))
                 else:
                     on_time = time_stamp
                 prev_state = state
@@ -53,9 +63,9 @@ class Button:
 
 class Queue:
     """ simple FIFO array of value: type-code
-        selected type-codes for unsigned int values:
-        'B' 1-byte; 'I' 2-byte; 'L' 4-byte
-        - is_data and is_space events control access
+        - selected type-codes for unsigned int values:
+            'B' 1-byte; 'I' 2-byte; 'L' 4-byte
+        - is_data and is_space events control .wait access
         - Event.set() "must be called from within a task",
             hence coros.
     """
@@ -117,9 +127,8 @@ async def button_event(q_in):
     run = True
     while run:
         await q_in.is_data.wait()
-        btn_id = await q_in.pop()
-        await q_in.is_data.wait()
-        btn_event = await q_in.pop()
+        btn_data = await q_in.pop()
+        btn_id, btn_event = decode_id_data(btn_data)
         print(f'button: {btn_id} value: {btn_event}')
         if btn_id == 2 and btn_event == 2:
             run = False

@@ -87,18 +87,20 @@ class ServoSG9x:
 
     async def transition(self, pw, pw_inc):
         """ move servo in linear steps with step_ms pause """
+        self.activate_pulse()
         pause = self._step_ms
         for _ in range(self.x_steps):
             pw += pw_inc
             self.pwm.duty_ns(pw)
             await asyncio.sleep_ms(pause)
+        self.zero_pulse()
         return pw
 
     async def set_servo_on_off(self, demand_state):
         """ move servo between off and on positions """
 
         def error_pc_str(ns_, demand_ns_):
-            """ testing: return final pulse-width error as % """
+            """ ns_ error as % of demand_ns_  """
             error_pc = (ns_ - demand_ns_) / demand_ns_ * 100
             return f'{self.id}: pw setting error: {error_pc:.2f}%'
 
@@ -114,10 +116,8 @@ class ServoSG9x:
         else:
             return
         # move servo
-        self.activate_pulse()
         transition_ns = await self.transition(self.pw_ns, inc_ns)
         print(error_pc_str(transition_ns, demand_ns))
-        self.zero_pulse()
         # save final state for next move
         self.pw_ns = demand_ns
         self.state = demand_state
@@ -139,9 +139,6 @@ class ServoGroup:
             self.servos.append(servo)
             self.id_servo[servo.id] = servo
             self.id_pin[servo.id] = pin  # for diagnostics
-        print(self.servos)
-        print(self.id_servo)
-        print(self.id_pin)
 
     def initialise(self, servo_init_):
         """ initialise servos by servo_init list

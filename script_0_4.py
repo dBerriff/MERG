@@ -95,13 +95,19 @@ class ServoSG9x:
         """ hold output at zero """
         self.pwm.duty_ns(0)
 
-    def transition(self, pw, pw_inc, steps_, step_ms):
+    def transition(self, pw_demand_ns):
         """ move servo in linear steps with step_ms pause """
-        for _ in range(steps_):
+        self.activate_pulse()
+        pw = self.pw_ns
+        pw_inc = (pw_demand_ns - pw) // self.x_steps
+        for _ in range(self.x_steps - 1):
             pw += pw_inc
-            self.move_servo(pw)
-            # blocking delay!
-            sleep_ms(step_ms)
+            self.pwm.duty_ns(pw)
+            sleep_ms(self.step_ms)
+        # set demand ns at final step
+        self.pwm.duty_ns(pw_demand_ns)
+        sleep_ms(self.step_ms)
+        self.zero_pulse()
 
     def set_servo_state(self, demand_):
         """ set servo to demand position off or on """
@@ -109,19 +115,13 @@ class ServoSG9x:
         if demand_ == self.state:
             return
         elif demand_ == self.OFF:
-            pw_inc = (self.off_ns - self.pw_ns) // self.x_steps
             final_ns = self.off_ns
         elif demand_ == self.ON:
-            pw_inc = (self.on_ns - self.pw_ns) // self.x_steps
             final_ns = self.on_ns
         else:
             return
-        # move servo
-        self.activate_pulse()
-        self.transition(self.pw_ns, pw_inc, self.x_steps, self.step_ms)
-        # final pause for servo transition - necessary?
-        sleep_ms(200)
-        self.zero_pulse()
+
+        self.transition(final_ns)
         # save final state for next move
         self.pw_ns = final_ns
         self.state = demand_

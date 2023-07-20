@@ -8,6 +8,7 @@
 import uasyncio as asyncio
 from machine import Pin
 from micropython import const
+import array
 from script_0_7 import ServoGroup
 from time import ticks_ms, ticks_diff
 
@@ -27,7 +28,7 @@ class HwSwitch:
     def __init__(self, pin):
         self.pin = pin  # for diagnostics
         self._hw_in = Pin(pin, Pin.IN, Pin.PULL_UP)
-        self.readings = [1] * self.n_readings
+        self.readings = array.array('B', [1] * self.n_readings)
 
     def get_state(self):
         """ get switch state; returns 0 (off) or 1 (on) """
@@ -38,7 +39,7 @@ class HwSwitch:
             - returns 0 (off) or 1 (on)
             - take n_readings over 20ms
         """
-        value = self._hw_in.value
+        value = self._hw_in.value  # pointer to method
         readings = self.readings
         pause = self.db_pause
         for i in range(self.n_pauses):
@@ -58,8 +59,10 @@ class HwSwitchGroup:
         self._states = {pin: 0 for pin in self.pins}
         self.tasks = [None] * self.n_switches  # for tasks in get_states_db
 
-    def get_states(self):
-        """ poll switch states """
+    async def get_states(self):
+        """ coro: read switch states
+            - coro only to provide consistent interface
+        """
         self._states = {
             pin: self.switches[pin].get_state() for pin in self.pins}
         return self._states
@@ -99,14 +102,11 @@ async def main():
 
     switch_pins = (16, 17, 18)
 
-    # {pin: (off_deg, on_deg, transition_time)}
-    servo_params = {0: (70, 110),
-                    1: (110, 70),
-                    2: (45, 135),
-                    3: (45, 135)
-                    }
+    servo_pins = (0, 1, 2, 3)
+    
+    servo_params = ([45, 135], [135, 45], [45, 135], [45, 135])
 
-    servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
+    servo_init = (0, 0, 0, 0)
 
     # {switch-pin: (servo-pin, ...), ...}
     switch_servos = {16: [0, 1],
@@ -126,7 +126,7 @@ async def main():
             onboard.off()
             await asyncio.sleep_ms(pause)
 
-    async def set_servos(poll_interval_ms=1000):
+    async def set_servos(poll_interval_ms=200):
         """ coro: set servos from switch inputs """
 
         def print_change(result_):
@@ -145,7 +145,7 @@ async def main():
 
     asyncio.create_task(blink())
     switch_group = HwSwitchGroup(switch_pins)
-    servo_group = ServoGroup(servo_params)
+    servo_group = ServoGroup(servo_pins, servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servos initialised')

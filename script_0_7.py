@@ -85,9 +85,10 @@ class ServoSG9x:
         """ turn off PWM output """
         self.pwm.duty_ns(0)
 
-    async def transition(self, pw, pw_inc):
+    async def stepper(self, pw_inc):
         """ move servo in linear steps with step_ms pause """
         self.activate_pulse()
+        pw = self.pw_ns
         pause = self._step_ms
         for _ in range(self.x_steps):
             pw += pw_inc
@@ -102,7 +103,7 @@ class ServoSG9x:
         def error_pc_str(ns_, demand_ns_):
             """ ns_ error as % of demand_ns_  """
             error_pc = (ns_ - demand_ns_) / demand_ns_ * 100
-            return f'{self.id}: pw setting error: {error_pc:.2f}%'
+            return f'{self.id}: pw stepping demand error: {error_pc:.2f}%'
 
         # set parameters
         if demand_state == self.state:
@@ -116,8 +117,8 @@ class ServoSG9x:
         else:
             return
         # move servo
-        transition_ns = await self.transition(self.pw_ns, inc_ns)
-        print(error_pc_str(transition_ns, demand_ns))
+        stepper_ns = await self.stepper(inc_ns)
+        print(error_pc_str(stepper_ns, demand_ns))
         # save final state for next move
         self.pw_ns = demand_ns
         self.state = demand_state
@@ -192,7 +193,7 @@ async def main():
     
     servo_pins = (0, 1, 2, 3)
     
-    servo_params = ([45, 135], [135, 45], [45, 135], [45, 135])
+    servo_params = ([80, 100], [100, 80], [45, 135], [45, 135])
 
     servo_init = (0, 0, 1, 1)
 

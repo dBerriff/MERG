@@ -10,7 +10,8 @@ from time import sleep_ms
 
 
 class ServoSG9x:
-    """ control a servo by PWM
+    """
+        control a servo by PWM
         - use Pico PWM hardware and built-in MP library
         - Pico PWM implements 0% to 100% duty cycle inclusive
         - user units are degrees
@@ -48,7 +49,7 @@ class ServoSG9x:
         self.on_ns = self.degrees_to_ns(self.deg_in_range(on_deg))
         self.transition_ms = int(transition_time * 1000)
         self.pwm = PWM(Pin(pin))
-        self.pwm.freq(self.FREQ)
+        self.pwm.freq(ServoSG9x.FREQ)
         self.pw_ns = None  # for self.activate_pulse()
         self.state = None
         # set servo transition parameters

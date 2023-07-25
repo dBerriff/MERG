@@ -26,14 +26,15 @@ async def main():
 
     switch_pins = (16, 17, 18)
     
+    servo_pins = (0, 1, 2, 3)
     # {pin: (off_deg, on_deg, transition_time)}
-    servo_params = {0: (70, 110),
-                    1: (110, 70),
-                    2: (45, 135),
-                    3: (45, 135)
+    servo_params = {[70, 110],
+                    [110, 70],
+                    [45, 135],
+                    [45, 135]
                     }
 
-    servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
+    servo_init = {0, 0, 0, 0}
     
     # {switch-pin: (servo-pin, ...), ...}
     switch_servos = {16: [0, 1],
@@ -44,7 +45,7 @@ async def main():
     # === end of parameters
     
     switch_group = HwSwitchGroup(switch_pins)
-    servo_group = ServoGroup(servo_params)
+    servo_group = ServoGroup(servo_pins, servo_params)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servos initialised')
@@ -52,7 +53,8 @@ async def main():
         sw_states = switch_group.get_states()
         result = await servo_group.match_demand(
             get_servo_demand(sw_states, switch_servos))
-        print(result)
+        if 0 in result or 1 in result:
+            print(result)
         await asyncio.sleep_ms(1000)
 
 

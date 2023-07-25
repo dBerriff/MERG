@@ -42,6 +42,7 @@ class ServoSG9x:
     SET_WAIT = const(500)  # ms
 
     def __init__(self, pin, off_deg, on_deg, transition_time=1.0):
+        self.pin = pin  # for diagnostics
         self.pwm = PWM(Pin(pin))
         self.pwm.freq(self.FREQ)
         self.off_ns = self.degrees_to_ns(off_deg)
@@ -129,17 +130,15 @@ class ServoGroup:
     """ create a list of servo objects for servo control
         - index: servo-object
         - switch_servos_ binds each servo to a specific switch input
+        - could use the list index to reference a servo, but
+        - a dictionary implements a more general approach
     """
 
     def __init__(self, servo_pins, servo_parameters):
-        self.servos = []
         self.id_servo = {}
-        self.id_pin = {}
         for i, pin in enumerate(servo_pins):
             servo = ServoSG9x(pin, *servo_parameters[i])
-            self.servos.append(servo)
             self.id_servo[servo.id] = servo
-            self.id_pin[servo.id] = pin  # for diagnostics
 
     def initialise(self, servo_init_):
         """ initialise servos by servo_init list
@@ -147,7 +146,7 @@ class ServoGroup:
             - set sequentially: avoid start-up current spike?
         """
         for i, setting in enumerate(servo_init_):
-            servo = self.servos[i]
+            servo = self.id_servo[i]
             if setting == 1:
                 servo.set_on()
             else:
@@ -197,7 +196,7 @@ async def main():
 
     servo_init = (0, 0, 1, 1)
 
-    # {switch-pin: (servo-pin, ...), ...}
+    # {switch-pin: [servo-id, ...], ...}
     switch_servos = {0: [0, 1],
                      1: [2],
                      2: [3]

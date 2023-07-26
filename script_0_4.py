@@ -98,17 +98,12 @@ class ServoSG9x:
 
     def transition(self, pw_demand_ns):
         """ move servo in linear steps with step_ms pause """
-        self.activate_pulse()
         pw = self.pw_ns
         pw_inc = (pw_demand_ns - pw) // self.x_steps
-        for _ in range(self.x_steps - 1):
+        for _ in range(self.x_steps):
             pw += pw_inc
             self.pwm.duty_ns(pw)
             sleep_ms(self.step_ms)
-        # set demand ns at final step
-        self.pwm.duty_ns(pw_demand_ns)
-        sleep_ms(self.step_ms)
-        self.zero_pulse()
 
     def set_servo_state(self, demand_):
         """ set servo to demand position off or on """
@@ -122,7 +117,12 @@ class ServoSG9x:
         else:
             return
 
+        self.activate_pulse()
         self.transition(final_ns)
+        # set demand ns at final step
+        self.pwm.duty_ns(final_ns)
+        sleep_ms(self.step_ms)
+        self.zero_pulse()
         # save final state for next move
         self.pw_ns = final_ns
         self.state = demand_
@@ -138,6 +138,8 @@ class ServoGroup:
         self.servos = {pin: ServoSG9x(pin, *servo_parameters[pin])
                        for pin in servo_parameters}
         self.switch_servos = switch_servos_
+        self.switch_list = list(self.servos.keys())
+        self.switch_list.sort()
 
     def initialise(self, servo_init_: dict):
         """ initialise servos by servo_init dict
@@ -155,7 +157,11 @@ class ServoGroup:
     
     def match_demand(self, switch_states):
         """ set servos from switch_states dictionary """
-        for sw in switch_states:
+        # for testing, sort switch order
+        switch_ids = list(switch_states.keys())
+        switch_ids.sort()
+        for sw in switch_ids:
+            print(f'Setting switch: {sw}')
             demand_state = switch_states[sw]
             for servo_pin in self.switch_servos[sw]:
                 self.servos[servo_pin].set_servo_state(demand_state)
@@ -175,10 +181,10 @@ def main():
     # === switch and servo parameters
     
     # {pin: (off_deg, on_deg, transition_time)}
-    servo_params = {0: (70, 110),
-                    1: (110, 70),
+    servo_params = {0: (45, 135),
+                    1: (135, 45),
                     2: (45, 135),
-                    3: (45, 135)
+                    3: (135, 45)
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}

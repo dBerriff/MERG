@@ -100,10 +100,14 @@ class ServoSG9x:
         """ move servo in linear steps with step_ms pause """
         pw = self.pw_ns
         pw_inc = (pw_demand_ns - pw) // self.x_steps
-        for _ in range(self.x_steps):
+        for _ in range(self.x_steps - 1):
             pw += pw_inc
             self.pwm.duty_ns(pw)
             sleep_ms(self.step_ms)
+        # set demand ns at final step
+        self.pwm.duty_ns(pw_demand_ns)
+        sleep_ms(self.step_ms)
+        self.zero_pulse()
 
     def set_servo_state(self, demand_):
         """ set servo to demand position off or on """
@@ -119,10 +123,6 @@ class ServoSG9x:
 
         self.activate_pulse()
         self.transition(final_ns)
-        # set demand ns at final step
-        self.pwm.duty_ns(final_ns)
-        sleep_ms(self.step_ms)
-        self.zero_pulse()
         # save final state for next move
         self.pw_ns = final_ns
         self.state = demand_

@@ -13,7 +13,6 @@ class LedDriver:
         - inheritance not used
     """
 
-    ZDC = const(0)
     FDC = const(0xffff)
     PC_DC = {pc: round(pc / 100 * FDC) for pc in range(101)}
 
@@ -34,19 +33,20 @@ class LedDriver:
 
 def main():
     """ test of LED PWM """
-    led_1 = LedDriver(6, 1200)
-    print(f'frequency: {led_1.freq}Hz, zero dc: {led_1.ZDC}, full dc: {led_1.FDC}')
+    led_1 = LedDriver(2, 1200)
+    print(f'frequency: {led_1.freq}Hz, full dc: {led_1.FDC}')
 
-    for i in range(10):
+    led_1.set_pc(0)
+    sleep_ms(1000)
+    for _ in range(3):
         # pc is percent duty cycle
         for pc in range(26):  # 0, 1, ..., 25
             led_1.set_pc(pc)
-            sleep_ms(100)
-        sleep_ms(200)
+            sleep_ms(200)
         for pc in range(25, -1, -1):  # 25, 24, ..., 0
             led_1.set_pc(pc)
-            sleep_ms(100)
-        sleep_ms(200)
+            sleep_ms(200)
+        sleep_ms(1000)
 
 
 if __name__ == '__main__':

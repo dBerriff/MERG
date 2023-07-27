@@ -9,7 +9,7 @@ from micropython import const
 from time import sleep_ms
 
 
-class ServoSG9x:
+class ServoSG9x(PWM):
     """
         control a servo by PWM
         - use Pico PWM hardware and built-in MP library
@@ -27,7 +27,6 @@ class ServoSG9x:
     # corresponding specified pulse widths: 500_000 to 2_500_000 ns
     # set more restrictive values if appropriate
     PW_MIN = const(500_000)  # ns
-    PW_CTR = const(1_500_000)  # ns
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)
     DEG_CTR = const(90)
@@ -43,13 +42,13 @@ class ServoSG9x:
     MIN_WAIT = const(200)  # ms
     SET_WAIT = const(500)  # ms
 
-    def __init__(self, pin, off_deg, on_deg, transition_time=1.0):
-        self.pin = pin  # for diagnostics
+    def __init__(self, pin, off_deg, on_deg, transition_time=3.0):
+        super().__init__(Pin(pin))
+        self.freq(ServoSG9x.FREQ)
+        self.id = pin  # for diagnostics
         self.off_ns = self.degrees_to_ns(self.deg_in_range(off_deg))
         self.on_ns = self.degrees_to_ns(self.deg_in_range(on_deg))
         self.transition_ms = int(transition_time * 1000)
-        self.pwm = PWM(Pin(pin))
-        self.pwm.freq(ServoSG9x.FREQ)
         self.pw_ns = None  # for self.activate_pulse()
         self.state = None
         # set servo transition parameters
@@ -74,7 +73,7 @@ class ServoSG9x:
         """ servo machine.PWM setting method """
         # guard against out-of-range demands
         if self.PW_MIN <= pw_ <= self.PW_MAX:
-            self.pwm.duty_ns(pw_)
+            self.duty_ns(pw_)
 
     def set_off(self):
         """ set servo direct to off position """
@@ -94,20 +93,16 @@ class ServoSG9x:
 
     def zero_pulse(self):
         """ hold output at zero """
-        self.pwm.duty_ns(0)
+        self.duty_ns(0)
 
     def transition(self, pw_demand_ns):
         """ move servo in linear steps with step_ms pause """
         pw = self.pw_ns
         pw_inc = (pw_demand_ns - pw) // self.x_steps
-        for _ in range(self.x_steps - 1):
+        for _ in range(self.x_steps):
             pw += pw_inc
-            self.pwm.duty_ns(pw)
+            self.duty_ns(pw)
             sleep_ms(self.step_ms)
-        # set demand ns at final step
-        self.pwm.duty_ns(pw_demand_ns)
-        sleep_ms(self.step_ms)
-        self.zero_pulse()
 
     def set_servo_state(self, demand_):
         """ set servo to demand position off or on """
@@ -123,6 +118,7 @@ class ServoSG9x:
 
         self.activate_pulse()
         self.transition(final_ns)
+        self.zero_pulse()
         # save final state for next move
         self.pw_ns = final_ns
         self.state = demand_
@@ -141,7 +137,7 @@ class ServoGroup:
         self.switch_list = list(self.servos.keys())
         self.switch_list.sort()
 
-    def initialise(self, servo_init_: dict):
+    def initialise(self, servo_init_):
         """ initialise servos by servo_init dict
             - allows for reading initial states from file
         """
@@ -150,18 +146,16 @@ class ServoGroup:
                 self.servos[pin].set_on()
             else:
                 self.servos[pin].set_off()
-            # blocking delay!
-            sleep_ms(500)  # allow some movement time per servo
+            sleep_ms(500)  # allow movement time per servo
         for servo in self.servos.values():
             servo.zero_pulse()
     
     def match_demand(self, switch_states):
         """ set servos from switch_states dictionary """
-        # for testing, sort switch order
-        switch_ids = list(switch_states.keys())
+        # set in key order
+        switch_ids = list(switch_states)
         switch_ids.sort()
         for sw in switch_ids:
-            print(f'Setting switch: {sw}')
             demand_state = switch_states[sw]
             for servo_pin in self.switch_servos[sw]:
                 self.servos[servo_pin].set_servo_state(demand_state)
@@ -181,10 +175,10 @@ def main():
     # === switch and servo parameters
     
     # {pin: (off_deg, on_deg, transition_time)}
-    servo_params = {0: (45, 135),
-                    1: (135, 45),
-                    2: (45, 135),
-                    3: (135, 45)
+    servo_params = {0: [45, 135],
+                    1: [135, 45],
+                    2: [45, 135],
+                    3: [135, 45]
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
@@ -199,6 +193,9 @@ def main():
 
     # create and initialise ServoGroup object
     servo_group = ServoGroup(servo_params, switch_servos)
+    # confirm servo instantiation
+    for servo in servo_group.servos.values():
+        print(f'servo id: {servo.id}, off_ns: {servo.off_ns}, on_ns: {servo.on_ns}')
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')

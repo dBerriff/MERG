@@ -17,10 +17,10 @@ def main():
     # === switch and servo parameters
     
     # {pin: (off_deg, on_deg, transition_time)}
-    servo_params = {0: (70, 110),
-                    1: (110, 70),
-                    2: (45, 135),
-                    3: (45, 135)
+    servo_params = {0: [45, 135],
+                    1: [135, 45],
+                    2: [45, 135],
+                    3: [135, 45]
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}

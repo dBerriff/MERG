@@ -89,7 +89,7 @@ def main():
         print(states)
         for sw_pin in states:
             for led_pin in switch_led[sw_pin]:  # set each connected LED
-                leds[led_pin].set_state(states[sw_pin])
+                leds[led_pin].set_off_on(states[sw_pin])
         sleep_ms(poll_interval)    
 
 

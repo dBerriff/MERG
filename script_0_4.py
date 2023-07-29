@@ -145,10 +145,10 @@ class ServoGroup:
             if servo_init_[pin] == 1:
                 self.servos[pin].set_on()
             else:
-                self.servos[pin].set_off()
+                self.servos[pin].set_off_on()
             sleep_ms(500)  # allow movement time per servo
         for servo in self.servos.values():
-            servo.zero_pulse()
+            servo.duty_ns(0)
     
     def match_demand(self, switch_states):
         """ set servos from switch_states dictionary """

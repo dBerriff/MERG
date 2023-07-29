@@ -1,19 +1,19 @@
 """ Pulse Width Modulation example; terse """
-
 from machine import Pin, PWM
-from micropython import const
 
 
 class LedDriver(PWM):
-    """ set PWM output """
+    """ set PWM output; class inherits from PWM """
+    #  convert percentage duty cycle to 16-bit (u16) equivalent
+    pc_u16 = {pc: pc * 0xffff // 100 for pc in range(101)}
 
     def __init__(self, pin, freq):
         super().__init__(Pin(pin))
         self.freq(freq)
 
-    def set_pc(self, pc_):
-        """ set output duty-cycle """
-        self.duty_u16(pc_ * 0xffff // 100)
+    def set_pc(self, duty_pc):
+        """ set percentage duty-cycle """
+        self.duty_u16(self.pc_u16[duty_pc])
 
 
 def main():

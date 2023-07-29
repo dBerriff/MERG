@@ -181,10 +181,10 @@ class ServoGroup:
             if servo_init_[pin] == 1:
                 self.servos[pin].set_on()
             else:
-                self.servos[pin].set_off()
+                self.servos[pin].set_off_on()
             sleep_ms(500)  # allow movement time
         for servo in self.servos.values():
-            servo.zero_pulse()
+            servo.duty_ns(0)
 
     async def match_demand(self, demand: dict):
         """ coro: move each servo to match switch demands """
@@ -193,7 +193,7 @@ class ServoGroup:
         for i, srv_pin in enumerate(demand):
             servo_ = self.servos[srv_pin]
             # coros will not run until awaited
-            tasks[i] = servo_.set_servo_on_off(demand[srv_pin])
+            tasks[i] = servo_.set_on_off(demand[srv_pin])
 
         # code for 'concurrent' setting
         result = await asyncio.gather(*tasks)

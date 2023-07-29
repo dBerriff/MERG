@@ -10,13 +10,14 @@ from script_0_4 import ServoGroup
 
 
 def main():
-    """ module run-time code """
+    """ test mechanical switch setting and response """
 
     print('In main()')
 
     # === switch and servo parameters
     
-    # {pin: (off_deg, on_deg, transition_time)}
+    # {pin: (off_deg, on_deg [, transition_time])}
+    # transition time defaults to 3s to match Tortoise turnout motor
     servo_params = {0: [45, 135],
                     1: [135, 45],
                     2: [45, 135],
@@ -25,7 +26,7 @@ def main():
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
     
-    # {switch-pin: (servo-pin, ...), ...}
+    # {switch-pin: [servo-pin(s)]}
     switch_servos = {16: [0, 1],
                      17: [2],
                      18: [3]
@@ -37,9 +38,9 @@ def main():
     
     switch_pins = list(switch_servos.keys())
     switch_pins.sort()
-
     switch_group = HwSwitchGroup(switch_pins)
     servo_group = ServoGroup(servo_params, switch_servos)
+    
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')

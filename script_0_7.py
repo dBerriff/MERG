@@ -32,7 +32,7 @@ class ServoSG9x(PWM):
     ON = const(1)
 
     # short delay period
-    MIN_WAIT = const(200)  # ms
+    PAUSE = const(200)  # ms
     SERVO_WAIT = const(500)  # ms
 
     def __init__(self, pin, off_deg, on_deg, transition_time=3.0):

@@ -1,6 +1,6 @@
 """ asyncio button input
     - poll buttons and add button press or hold action to a queue
-    - identify buttons by unique ID rather than pin
+    - send button id and event as separate values
     - button_ev Event is set when data is added to the queue
     - events are set on button release
     - Queue uses the array class for efficiency

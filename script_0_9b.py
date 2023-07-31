@@ -24,9 +24,9 @@ class ServoSG9x(PWM):
     # corresponding pulse widths: 1_000_000 to 2_000_000 ns
     DEG_MIN = const(0)
     DEG_MAX = const(90)
-    PW_CTR = const(1_500_000)
     PW_MIN = const(1_000_000)  # ns
-    PW_MAX = const(2_000_000)  # ns
+    PW_CTR = const(1_500_000)
+    PW_MAX = const(2_000_000)
     NS_PER_DEGREE = const((PW_MAX - PW_MIN) // (DEG_MAX - DEG_MIN))
 
     OFF = const(0)
@@ -38,8 +38,7 @@ class ServoSG9x(PWM):
 
     # motion: x, y axes; straight line between specified points
     # from point (0, 0) to (100, 100); (0, 0) assumed
-    motion_set = {'linear', 'overshoot', 'bounce', 's_curve',
-                  'slowing', 'semaphore'}
+
     motion_coords = {
         'linear': ((100, 100),),
         'overshoot': ((60, 110), (70, 95), (80, 105), (90, 95), (100, 100)),
@@ -47,6 +46,7 @@ class ServoSG9x(PWM):
         's_curve': ((35, 20), (65, 80), (100, 100)),
         'slowing': ((10, 30), (20, 55), (40, 79), (60, 91), (80, 97), (100, 100))
     }
+    # also 'semaphore' for signal "bounce"
 
     def __init__(self, pin, off_deg, on_deg,
                  transition_time=3.0, motion='linear'):
@@ -56,25 +56,25 @@ class ServoSG9x(PWM):
         self.off_ns = self.degrees_to_ns(off_deg)
         self.on_ns = self.degrees_to_ns(on_deg)
         self.transition_ms = int(transition_time * 1000)
-        if motion not in self.motion_set:
-            motion = 'linear'
+        self.pw_ns = None  # for self.activate_pulse()
+        self.state = None
+        # set servo (x, y) transition parameters
+        self.pw_range = self.on_ns - self.off_ns
+        self.x_inc = 1
+        self.x_steps = 100
+        self.step_ms = self.transition_ms // self.x_steps
+        self.pw_on_inc = (self.on_ns - self.off_ns) // self.x_steps  # per y step
+        self.pw_off_inc = -self.pw_on_inc
+        # set motion parameters
         if motion == 'semaphore':
             motion_on = 'overshoot'
             motion_off = 'bounce'
         else:
             motion_on = motion
             motion_off = motion
-        self.pw_ns = None  # for self.activate_pulse()
-        self.state = None
-        # set servo transition parameters
-        self.pw_range = self.on_ns - self.off_ns
-        self.x_inc = 1
-        self.x_steps = 100
-        self.step_ms = self.transition_ms // self.x_steps
-        self.pw_on_inc = (self.on_ns - self.off_ns) // self.x_steps  # per y step
         self.on_coords = self.motion_coords[motion_on]
-        self.pw_off_inc = -self.pw_on_inc
         self.off_coords = self.motion_coords[motion_off]
+        # relay object must be assigned if required
         self.relay = None
 
     def degrees_to_ns(self, degrees):
@@ -104,7 +104,7 @@ class ServoSG9x(PWM):
 
     async def stepper(self, start_pw, pw_inc_, coords_):
         """ move servo in linear segments """
-        # avoid repeated dict look-ups
+        # avoid repeated dictionary look-ups
         step_ms = self.step_ms
         x_inc = self.x_inc
         move_servo = self.move_servo
@@ -140,11 +140,15 @@ class ServoSG9x(PWM):
             coords = self.on_coords
         else:
             return
-        # move servo
-        self.duty_ns(self.pw_ns)
+
+        # relay object must be assigned to servo object if required
+        # set at 50% transition time
         if self.relay:
             asyncio.create_task(
                 self.relay.set_state(demand_, self.transition_ms//2))
+
+        # move servo
+        self.duty_ns(self.pw_ns)
         await self.stepper(self.pw_ns, pw_inc, coords)
         self.duty_ns(0)
         # save final state for next move
@@ -258,9 +262,9 @@ async def main():
                     3: [25, 65, 2.0, 'semaphore']
                     }
 
-    servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
+    servo_init = {0: 0, 1: 0, 2: 0, 3: 0}  # servo-pin: init value
     
-    servo_relay = {0: 8, 1: 9, 2: 10, 3: 11}
+    servo_relay = {0: 8, 1: 9, 2: 10}  # servo-pin: relay pin (if any)
 
     # {switch-pin: (servo-pin, ...), ...}
     switch_servos = {16: [0, 1],

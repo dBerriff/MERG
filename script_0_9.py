@@ -180,11 +180,10 @@ class ServoGroup:
         """ coro: move each servo to match switch demands """
         # assign tasks elements: avoid creating new list each call
         tasks = self.tasks
-        for i, srv_pin in enumerate(demand):
-            servo_ = self.servos[srv_pin]
+        for i, srv_id in enumerate(demand):
+            servo_ = self.servos[srv_id]
             # coros will not run until awaited
-            tasks[i] = servo_.set_on_off(demand[srv_pin])
-
+            tasks[i] = servo_.set_on_off(demand[srv_id])
         # code for 'concurrent' setting
         result = await asyncio.gather(*tasks)
         return result  # for testing
@@ -221,7 +220,7 @@ async def main():
     # {pin: (off_deg, on_deg)}
     servo_params = {0: [45, 135, 5.0, 's_curve'],
                     1: [135, 45, 5.0, 's_curve'],
-                    2: [45, 135, 5.0],
+                    2: [45, 135, 5.0, 'slowing'],
                     3: [45, 135, 2.0, 'semaphore']
                     }
 

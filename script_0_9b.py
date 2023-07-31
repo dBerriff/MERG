@@ -20,15 +20,13 @@ class ServoSG9x(PWM):
     # SG90 servos specify f = 50Hz
     FREQ = const(50)  # Hz
 
-    # specified servo motion is from approximately 0 to 180 degrees
-    # (45 to 135 degrees should be used in practice)
-    # corresponding specified pulse widths: 500_000 to 2_500_000 ns
-    # set more restrictive values if appropriate
-    PW_CTR = const(1_500_000)
-    PW_MIN = const(500_000)  # ns
-    PW_MAX = const(2_500_000)  # ns
+    # specified servo motion is from 45 to 135 degrees
+    # corresponding pulse widths: 1_000_000 to 2_000_000 ns
     DEG_MIN = const(0)
-    DEG_MAX = const(180)
+    DEG_MAX = const(90)
+    PW_CTR = const(1_500_000)
+    PW_MIN = const(1_000_000)  # ns
+    PW_MAX = const(2_000_000)  # ns
     NS_PER_DEGREE = const((PW_MAX - PW_MIN) // (DEG_MAX - DEG_MIN))
 
     OFF = const(0)
@@ -44,12 +42,11 @@ class ServoSG9x(PWM):
                   'slowing', 'semaphore'}
     motion_coords = {
         'linear': ((100, 100),),
-        'overshoot': ((60, 110), (70, 95), (80, 103), (90, 98), (100, 100)),
+        'overshoot': ((60, 110), (70, 95), (80, 105), (90, 95), (100, 100)),
         'bounce': ((60, 100), (70, 90), (80, 100), (90, 95), (100, 100)),
         's_curve': ((35, 20), (65, 80), (100, 100)),
-        'slowing': ((25, 54), (50, 81), (75, 95), (100, 100))
+        'slowing': ((10, 30), (20, 55), (40, 79), (60, 91), (80, 97), (100, 100))
     }
-
 
     def __init__(self, pin, off_deg, on_deg,
                  transition_time=3.0, motion='linear'):
@@ -78,7 +75,6 @@ class ServoSG9x(PWM):
         self.on_coords = self.motion_coords[motion_on]
         self.pw_off_inc = -self.pw_on_inc
         self.off_coords = self.motion_coords[motion_off]
-
         self.relay = None
 
     def degrees_to_ns(self, degrees):
@@ -147,7 +143,8 @@ class ServoSG9x(PWM):
         # move servo
         self.duty_ns(self.pw_ns)
         if self.relay:
-            asyncio.create_task(self.relay.set_state(demand_))
+            asyncio.create_task(
+                self.relay.set_state(demand_, self.transition_ms//2))
         await self.stepper(self.pw_ns, pw_inc, coords)
         self.duty_ns(0)
         # save final state for next move
@@ -162,13 +159,17 @@ class ServoGroup:
         - switch_servos_ binds each servo to a specific switch input
     """
 
-    def __init__(self, servo_parameters):
-        self.servos = {}
-        for pin in servo_parameters:
-            servo = ServoSG9x(pin, *servo_parameters[pin])
-            servo.relay = Relay(pin+8)  # temp for testing
-            self.servos[pin] = servo
-
+    def __init__(self, servo_parameters, **kwargs):
+        servos = {pin: ServoSG9x(pin, *servo_parameters[pin])
+                  for pin in servo_parameters}
+        # if relay is specified, add to servos object
+        if 'servo_relay' in kwargs:
+            s_r = kwargs['servo_relay']
+            for pin in servos:
+                if pin in s_r:
+                    relay = Relay(s_r[pin])
+                    servos[pin].relay = relay
+        self.servos = servos
         self.tasks = [None] * len(self.servos)
 
     def initialise(self, servo_init_: dict):
@@ -189,11 +190,10 @@ class ServoGroup:
         """ coro: move each servo to match switch demands """
         # assign tasks elements: avoid creating new list each call
         tasks = self.tasks
-        for i, srv_pin in enumerate(demand):
-            servo_ = self.servos[srv_pin]
+        for i, srv_id in enumerate(demand):
+            servo_ = self.servos[srv_id]
             # coros will not run until awaited
-            tasks[i] = servo_.set_on_off(demand[srv_pin])
-
+            tasks[i] = servo_.set_on_off(demand[srv_id])
         # code for 'concurrent' setting
         result = await asyncio.gather(*tasks)
         return result  # for testing
@@ -208,15 +208,15 @@ class Relay(Pin):
     R_OFF = const(0)
     R_ON = const(1)
 
-    def __init__(self, pin, delay=1.5):
+    def __init__(self, pin):
         super().__init__(pin, Pin.OUT)
         self.pin = pin  # for diagnostics
-        self.delay_ms = int(delay * 1000)
+        self.delay_ms = 1.5
         self.value(self.R_OFF)  # initialise at off
 
-    async def set_state(self, demand):
+    async def set_state(self, demand, delay):
         """ set pin-out low or high """
-        await asyncio.sleep_ms(self.delay_ms)
+        await asyncio.sleep_ms(delay)
         self.value(demand)
         print(f'relay pin: {self.pin} set to: {demand}')
 
@@ -243,8 +243,6 @@ async def main():
     test_sw_states = ({16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0},
-                      {16: 1, 17: 1, 18: 1},
-                      {16: 0, 17: 0, 18: 0},
                       {16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0})
@@ -254,13 +252,15 @@ async def main():
     # switch_pins = (16, 17, 18)
 
     # {pin: (off_deg, on_deg)}
-    servo_params = {0: [45, 135, 5.0, 's_curve'],
-                    1: [135, 45, 5.0, 's_curve'],
-                    2: [45, 135, 5.0],
-                    3: [70, 110, 3.0, 'semaphore']
+    servo_params = {0: [0, 90, 5.0, 's_curve'],
+                    1: [90, 0, 5.0, 's_curve'],
+                    2: [0, 90, 5.0, 'slowing'],
+                    3: [25, 65, 2.0, 'semaphore']
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}
+    
+    servo_relay = {0: 8, 1: 9, 2: 10, 3: 11}
 
     # {switch-pin: (servo-pin, ...), ...}
     switch_servos = {16: [0, 1],
@@ -270,7 +270,7 @@ async def main():
 
     # === end of parameters
 
-    servo_group = ServoGroup(servo_params)
+    servo_group = ServoGroup(servo_params, servo_relay=servo_relay)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')

@@ -64,9 +64,6 @@ class HwSwitchGroup:
 def main():
     """ test HwSwitchGroup class """
     print('In main()')
-    
-
-    # test multiple switches/buttons to mulitple LEDs operation
 
     # === test data
 

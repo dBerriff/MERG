@@ -49,13 +49,13 @@ class ServoSG9x(PWM):
     # also 'semaphore' for signal "bounce"
 
     def __init__(self, pin, off_deg, on_deg,
-                 transition_time=3.0, motion='linear'):
+                 transition_period=3.0, motion='linear'):
         super().__init__(Pin(pin))
         self.freq(self.FREQ)
         self.id = pin  # for diagnostics
         self.off_ns = self.degrees_to_ns(off_deg)
         self.on_ns = self.degrees_to_ns(on_deg)
-        self.transition_ms = int(transition_time * 1000)
+        self.transition_ms = int(transition_period * 1000)
         self.pw_ns = None  # for self.activate_pulse()
         self.state = None
         # set servo (x, y) transition parameters
@@ -104,7 +104,7 @@ class ServoSG9x(PWM):
 
     async def stepper(self, start_pw, pw_inc_, coords_):
         """ move servo in linear segments """
-        # avoid repeated dictionary look-ups
+        # local vars avoid repeated dictionary look-ups
         step_ms = self.step_ms
         x_inc = self.x_inc
         move_servo = self.move_servo
@@ -123,6 +123,7 @@ class ServoSG9x(PWM):
                 await asyncio.sleep_ms(step_ms)
             x_0 = x1
             y_0 = y1
+        return pw_
 
     async def set_on_off(self, demand_):
         """ move servo between off and on positions """
@@ -142,16 +143,19 @@ class ServoSG9x(PWM):
             return
 
         # relay object must be assigned to servo object if required
-        # set at 50% transition time
+        # delay for 50% transition time
         if self.relay:
+            # noinspection PyAsyncCall
             asyncio.create_task(
                 self.relay.set_state(demand_, self.transition_ms//2))
-
-        # move servo
+        # restore pulse (not essential) and move servo
         self.duty_ns(self.pw_ns)
-        await self.stepper(self.pw_ns, pw_inc, coords)
+        sw_ns = await self.stepper(self.pw_ns, pw_inc, coords)
+        # check for software setting error
+        print(f'{final_ns} {sw_ns} {(sw_ns - final_ns) / final_ns * 100:.2f}%')
+        # switch off pulse
         self.duty_ns(0)
-        # save final state for next move
+        # save final state
         self.pw_ns = final_ns
         self.state = demand_
         return self.state  # for testing
@@ -162,18 +166,19 @@ class ServoGroup:
         - pin_number: servo-object
         - switch_servos_ binds each servo to a specific switch input
     """
-
+    # kwargs for 'optional extras' parameters: relays in this case
     def __init__(self, servo_parameters, **kwargs):
         servos = {pin: ServoSG9x(pin, *servo_parameters[pin])
                   for pin in servo_parameters}
-        # if relay is specified, add to servos object
+        # if relays are specified, add to servo objects
         if 'servo_relay' in kwargs:
             s_r = kwargs['servo_relay']
             for pin in servos:
+                # not all servos will have an associated relay
                 if pin in s_r:
-                    relay = Relay(s_r[pin])
-                    servos[pin].relay = relay
+                    servos[pin].relay = Relay(s_r[pin])
         self.servos = servos
+        # task list: avoid creating new list for each method call
         self.tasks = [None] * len(self.servos)
 
     def initialise(self, servo_init_: dict):
@@ -192,58 +197,44 @@ class ServoGroup:
 
     async def match_demand(self, demand: dict):
         """ coro: move each servo to match switch demands """
-        # assign tasks elements: avoid creating new list each call
         tasks = self.tasks
         for i, srv_id in enumerate(demand):
             servo_ = self.servos[srv_id]
-            # coros will not run until awaited
             tasks[i] = servo_.set_on_off(demand[srv_id])
-        # code for 'concurrent' setting
+        # run tasks
         result = await asyncio.gather(*tasks)
         return result  # for testing
 
 
 class Relay(Pin):
-    """ pin out to set a relay
-        - set constants to match relay logic
-        - delay would normally be half servo transit time
-    """
-    # match relay board requirement
-    R_OFF = const(0)
-    R_ON = const(1)
+    """ pin out to set a relay """
 
     def __init__(self, pin):
         super().__init__(pin, Pin.OUT)
         self.pin = pin  # for diagnostics
-        self.delay_ms = 1.5
-        self.value(self.R_OFF)  # initialise at off
 
     async def set_state(self, demand, delay):
-        """ set pin-out low or high """
+        """ set relay pin-out after delay ms """
+        # delay: normally half servo transit-time
         await asyncio.sleep_ms(delay)
         self.value(demand)
-        print(f'relay pin: {self.pin} set to: {demand}')
 
-    def get_state(self):
-        """ return pin state """
-        return self.value()
+
+def get_servo_demand(sw_states_, switch_servos_):
+    """ return dict of servo setting demands """
+    servo_demand = {}
+    for sw_pin_ in sw_states_:
+        demand_ = sw_states_[sw_pin_]
+        for servo_pin_ in switch_servos_[sw_pin_]:
+            servo_demand[servo_pin_] = demand_
+    return servo_demand
 
 
 async def main():
     """ test servo operation from pre-set "switch" values """
     print('In main()')
 
-    def get_servo_demand(sw_states_, switch_servos_):
-        """ return dict of servo setting demands """
-        servo_demand = {}
-        for sw_pin_ in sw_states_:
-            demand_ = sw_states_[sw_pin_]
-            for servo_pin_ in switch_servos_[sw_pin_]:
-                servo_demand[servo_pin_] = demand_
-        return servo_demand
-
-    # switch states in standard interface dict format
-    # switch test states include no-change values
+    # switch test states
     test_sw_states = ({16: 0, 17: 0, 18: 0},
                       {16: 1, 17: 1, 18: 1},
                       {16: 0, 17: 0, 18: 0},
@@ -255,18 +246,18 @@ async def main():
 
     # switch_pins = (16, 17, 18)
 
-    # {pin: (off_deg, on_deg)}
+    # {pin: (off_deg, on_deg, transition_period, motion)}
     servo_params = {0: [0, 90, 5.0, 's_curve'],
                     1: [90, 0, 5.0, 's_curve'],
                     2: [0, 90, 5.0, 'slowing'],
-                    3: [25, 65, 2.0, 'semaphore']
+                    3: [25, 70, 2.0, 'semaphore']
                     }
 
     servo_init = {0: 0, 1: 0, 2: 0, 3: 0}  # servo-pin: init value
     
-    servo_relay = {0: 8, 1: 9, 2: 10}  # servo-pin: relay pin (if any)
+    servo_relay = {0: 8, 1: 9, 2: 10}  # servo-pin: relay pin if any
 
-    # {switch-pin: (servo-pin, ...), ...}
+    # {switch-pin: [servo-pin, ...], ...}
     switch_servos = {16: [0, 1],
                      17: [2],
                      18: [3]

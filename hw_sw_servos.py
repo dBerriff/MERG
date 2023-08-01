@@ -5,8 +5,8 @@
 """
 
 from time import sleep_ms
-from script_0_3 import HwSwitchGroup
-from script_0_4 import ServoGroup
+from hw_sw_group import HwSwitchGroup
+from set_servo_group import ServoGroup
 
 
 def main():

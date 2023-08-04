@@ -47,17 +47,14 @@ class Queue:
     def q_len(self):
         """ number of items in the queue """
         if self.head == self.next:
-            if self.is_data.is_set():
-                n = self.max_len
-            else:
-                n = 0
+            n = self.max_len if self.is_data.is_set() else 0
         else:
             n = (self.next - self.head) % self.max_len
         return n
 
     def q_print(self):
         """ print out all queue-item values """
-        print(f'head: {self.head}; next: {self.next}')
+        print(f'head: {self.head}; next: {self.next}; length: {self.q_len}')
         q_str = '['
         for i in range(self.max_len):
             q_str += f'{self.queue[i]}, '
@@ -66,16 +63,27 @@ class Queue:
 
 
 async def main():
+    
+    async def fill_q(q_, n):
+        """ fill queue """
+        for i in range(n):
+            await queue.is_space.wait()
+            await queue.add(i)
+        
+    async def empty_q(q_):
+        while queue.is_data.is_set():
+            p = await queue.pop()
+            print(p, q_.q_len)
+            await asyncio.sleep_ms(0)
+        
     """ test button input """
     print('In main()')
     queue = Queue('B')
-    await queue.add(1)
-    await queue.add(2)
-    await queue.add(3)
-    p = await queue.pop()
-    print(p)
-    p = await queue.pop()
-    print(p)
+    asyncio.create_task(fill_q(queue, 64))
+    await asyncio.sleep_ms(0)  # let scheduler run tasks
+    queue.q_print()
+    # empty the queue
+    await empty_q(queue)
     queue.q_print()
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 """
-    set servos from test values for switch input
+    set servos with linear segment motion
     N.B. Demonstration code: prioritises clarity before efficiency
     - servos are set asynchronously
 """

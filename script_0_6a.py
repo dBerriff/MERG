@@ -2,6 +2,7 @@
 
 from machine import Pin
 import uasyncio as asyncio
+import gc
 
 
 class KeyBuffer:
@@ -32,6 +33,7 @@ class SwitchMatrix:
     def __init__(self, cols, rows):
         self.cols = cols
         self.rows = rows
+        self.switch_states = {}
         # Set col pins as outputs, row pins as inputs
         self.col_pins = tuple(
             [Pin(pin, mode=Pin.OUT) for pin in cols])
@@ -40,7 +42,7 @@ class SwitchMatrix:
         for pin in self.col_pins:
             pin.low()
 
-    def scan(self):
+    def scan_switch(self):
         """ scan for closed matrix switch """
         for col, c_pin in enumerate(self.col_pins):
             c_pin.high()
@@ -51,10 +53,19 @@ class SwitchMatrix:
             c_pin.low()
         return None
 
+    def scan_matrix(self):
+        """ scan all matrix switch states """
+        for col, c_pin in enumerate(self.col_pins):
+            c_pin.high()
+            for row, r_pin in enumerate(self.row_pins):
+                self.switch_states[(col << 4) + row] = r_pin.value()
+            c_pin.low()
+        return self.switch_states
+
 
 class KeyPad(SwitchMatrix):
-    """ process keypad input
-        - producer: demonstrate buffered output """
+    """ process matrix keypad input
+        - output key-value to Buffer object """
     key_values = {0: '1', 1: '2', 2: '3', 3: 'A',
                   16: '4', 17: '5', 18: '6', 19: 'B',
                   32: '7', 33: '8', 34: '9', 35: 'C',
@@ -65,17 +76,21 @@ class KeyPad(SwitchMatrix):
         self.buffer = buffer
 
     async def key_input(self):
-        """ accept single key-press but skip any repeated returns """
-        new_press = True  # ready for first key press
+        """ accept single key-press from scanned switches
+            - ignore key if held down except initial press
+            - ignore multiple keys except first found
+        """
+        new_press = True
         while True:
-            node = self.scan()
+            node = self.scan_switch()
             if node is None:
-                new_press = True  # previous key has been released
+                new_press = True  # previous key released
             elif new_press:
-                # save key value in buffer
                 await self.buffer.add(self.key_values[node])
-                new_press = False  # reject repeat readings
+                new_press = False  # supress repeat readings
+            gc.collect()
             await asyncio.sleep_ms(100)
+
 
 
 async def print_buffer(buffer):

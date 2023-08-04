@@ -1,7 +1,7 @@
 """
-    set servos from test values for switch input
+    set servos and relays from test values for switch input
     N.B. Demonstration code: prioritises clarity before efficiency
-    - servos are set asynchronously
+    - servos and relays are set asynchronously
 """
 
 import uasyncio as asyncio

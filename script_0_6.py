@@ -20,7 +20,7 @@ async def blink(led, period=1100):
     while True:
         led.on()
         await asyncio.sleep_ms(100)  # allow other tasks to run
-        led.off()
+        led._off()
         await asyncio.sleep_ms(off_ms)
 
 

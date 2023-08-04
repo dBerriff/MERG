@@ -5,7 +5,7 @@
 """
 
 from time import sleep_ms
-from hw_sw_group import HwSwitchGroup
+from scrip_0_3 import HwSwitchGroup
 from set_servo_group import ServoGroup
 
 

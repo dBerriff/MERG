@@ -65,15 +65,16 @@ class KeyPad(SwitchMatrix):
         self.buffer = buffer
 
     async def key_input(self):
-        """ process single-key input """
-        new_press = True
+        """ accept single key-press but skip any repeated returns """
+        new_press = True  # ready for first key press
         while True:
             node = self.scan()
             if node is None:
-                new_press = True
+                new_press = True  # previous key has been released
             elif new_press:
+                # save key value in buffer
                 await self.buffer.add(self.key_values[node])
-                new_press = False
+                new_press = False  # reject repeat readings
             await asyncio.sleep_ms(100)
 
 

@@ -63,23 +63,25 @@ class Queue:
 
 
 async def main():
+    """ test Queue class """
+    print('In main()')
     
     async def fill_q(q_, n):
-        """ fill queue """
+        """ fill queue with test integers """
         for i in range(n):
             await queue.is_space.wait()
             await queue.add(i)
         
     async def empty_q(q_):
+        """ empty and print queue elements """
         while queue.is_data.is_set():
             p = await queue.pop()
             print(p, q_.q_len)
             await asyncio.sleep_ms(0)
-        
-    """ test button input """
-    print('In main()')
+
     queue = Queue('B')
-    asyncio.create_task(fill_q(queue, 64))
+    queue.q_print()
+    asyncio.create_task(fill_q(queue, 32))
     await asyncio.sleep_ms(0)  # let scheduler run tasks
     queue.q_print()
     # empty the queue

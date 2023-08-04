@@ -13,18 +13,18 @@ class KeyBuffer:
     """
     
     def __init__(self):
-        self.item = None
+        self._item = None
         self.is_data = asyncio.Event()
     
     async def add(self, item):
         """ add item to buffer """
-        self.item = item
+        self._item = item
         self.is_data.set()
 
     async def pop(self):
         """ remove item from buffer """
         self.is_data.clear()
-        return self.item
+        return self._item
 
 
 class SwitchMatrix:
@@ -90,7 +90,6 @@ class KeyPad(SwitchMatrix):
                 new_press = False  # supress repeat readings
             gc.collect()
             await asyncio.sleep_ms(100)
-
 
 
 async def print_buffer(buffer):

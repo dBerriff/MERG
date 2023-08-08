@@ -43,6 +43,7 @@ class ServoSG9x(PWM):
         self.on_ns = self.degrees_to_ns(on_deg)
         self.transition_ms = int(transition_time * 1000)
         self.state = None
+        self.pw_ns = None
         self.x_steps = 100
         self._step_ms = self.transition_ms // self.x_steps
         # self._pw_step_inc = (self.on_ns - self.off_ns) // self.x_steps
@@ -57,6 +58,7 @@ class ServoSG9x(PWM):
     def set_off(self):
         """ move direct to off position; set object attributes """
         self.duty_ns(self.off_ns)
+        self.pw_ns = self.off_ns
         self.state = self.OFF
         self.duty_ns(0)
         sleep_ms(self.SERVO_WAIT)
@@ -64,11 +66,13 @@ class ServoSG9x(PWM):
     def set_on(self):
         """ move direct to on position; set object attributes """
         self.duty_ns(self.on_ns)
+        self.pw_ns = self.on_ns
         self.state = self.ON
         sleep_ms(self.SERVO_WAIT)
 
-    async def move_servo(self, pw, demand_pw):
+    async def move_servo(self, demand_pw):
         """ move servo from start_ns to demand_ns """
+        pw = self.pw_ns
         inc_ns = (demand_pw - pw) // self.x_steps
         step_pause = self._step_ms  # reduce dict look-ups
         # restore PWM
@@ -79,6 +83,7 @@ class ServoSG9x(PWM):
             await asyncio.sleep_ms(step_pause)
         self.duty_ns(demand_pw)  # precise final setting
         await asyncio.sleep_ms(step_pause)
+        self.pw_ns = demand_pw
         # stop PWM
         self.duty_ns(0)
         return self.state  # for testing
@@ -92,11 +97,12 @@ class ServoGroup:
         - a dictionary implements a more general approach
     """
 
-    def __init__(self, servo_parameters):
+    def __init__(self, servo_parameters, buffer):
         self.id_servo = {}
         for pin in servo_parameters:
             servo = ServoSG9x(pin, *servo_parameters[pin])
             self.id_servo[servo.id] = servo
+        self.buffer = buffer
 
     def initialise(self, servo_init_):
         """ initialise servos by servo_init list
@@ -110,27 +116,22 @@ class ServoGroup:
             else:
                 servo.set_off()
 
-    async def match_demand(self, demand):
+    async def match_demand(self):
         """ coro: match servo positions to on/off switch demands """
-        tasks = []
-        for id_ in demand:
-            servo = self.id_servo[id_]
-            srv_demand = demand[id_]
-            if servo.state == srv_demand:
-                continue  # already at demand state
-            if srv_demand == servo.ON:
-                current_ns = servo.off_ns
-                demand_ns = servo.on_ns
-            elif srv_demand == servo.OFF:
-                current_ns = servo.on_ns
-                demand_ns = servo.off_ns
-            else:
-                continue
-            tasks.append(servo.move_servo(current_ns, demand_ns))
-            servo.state = srv_demand  # save new demand state
-        # gather() awaits completion of all tasks in list
-        result = await asyncio.gather(*tasks)
-        return result  # for testing
+        while True:
+            await self.buffer.is_data.wait()
+            demand = await self.buffer.pop()
+            print(f'match demand: {demand}')
+            tasks = []
+            for id_ in demand:
+                servo = self.id_servo[id_]
+                srv_demand = demand[id_]
+                if servo.state == srv_demand:
+                    continue  # already at demand state
+                demand_ns = servo.on_ns if srv_demand == servo.ON else servo.off_ns
+                tasks.append(servo.move_servo(demand_ns))
+                servo.state = srv_demand  # save new demand state
+            await asyncio.gather(*tasks)
 
     def __str__(self):
         """ print out servo parameters """
@@ -141,33 +142,61 @@ class ServoGroup:
         return s
 
 
-async def main():
-    """ test servo operation by applying pre-set demand values """
-    print('In main()')
+class SwitchGroup:
+    """ switch states to set servos """
 
-    def get_servo_demand(sw_states_, switch_servos_):
+    def __init__(self, sw_states, switch_servos, data_buffer):
+        self.sw_states = sw_states
+        self.switch_servos = switch_servos
+        self.data_buffer = data_buffer
+
+    def get_servo_demand(self, sw_states_):
         """ return dict- servo_id: demand """
         servo_demand = {}
         for key in sw_states_:
             sw_demand = sw_states_[key]
-            for servo_id in switch_servos_[key]:
+            for servo_id in self.switch_servos[key]:
                 servo_demand[servo_id] = sw_demand
         return servo_demand
 
+    async def run_states(self):
+        """ run through a set of switch states """
+        for state in self.sw_states:
+            demand = self.get_servo_demand(state)
+            await self.data_buffer.add(demand)
+            await asyncio.sleep_ms(5_000)  # pause between settings
+
+
+class DataBuffer:
+    """ single item buffer
+        - similar interface to Queue
+        - Event.set() "must be called from within a task"
+        - hence add() and pop() as coros
+    """
+
+    def __init__(self):
+        self._item = None
+        self.is_data = asyncio.Event()
+
+    async def add(self, item):
+        """ add item to buffer """
+        self._item = item
+        self.is_data.set()
+
+
+    async def pop(self):
+        """ remove item from buffer """
+        self.is_data.clear()
+        return self._item
+
+
+async def main():
+    """ test servo operation by applying pre-set demand values """
+    print('In main()')
+
     # parameters: dictionaries used to identify objects
 
-    # (simulated) switch test states; id: state
-    test_sw_states = (
-        {16: 0, 17: 1, 18: 1},
-        {16: 1, 17: 0, 18: 0},
-        {16: 0, 17: 1, 18: 1},
-        {16: 0, 17: 0, 18: 0},
-        {16: 1, 17: 1, 18: 1},
-        {16: 0, 17: 0, 18: 0}
-    )
-
     # === switch and servo parameters
-
     # pin: (off_degrees, on_degrees [, transition_time])
     servo_params = {0: (45, 135),
                     1: (135, 45),
@@ -183,19 +212,25 @@ async def main():
                      18: [3]
                      }
 
+    # (simulated) switch test states; id: state
+    test_sw_states = (
+        {16: 0, 17: 1, 18: 1},
+        {16: 1, 17: 0, 18: 0},
+        {16: 0, 17: 1, 18: 1},
+        {16: 0, 17: 0, 18: 0},
+        {16: 1, 17: 1, 18: 1},
+        {16: 0, 17: 0, 18: 0}
+    )
     # === end of parameters
 
-    servo_group = ServoGroup(servo_params)
+    buffer = DataBuffer()
+    switch_group = SwitchGroup(test_sw_states, switch_servos, buffer)
+    servo_group = ServoGroup(servo_params, buffer)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('run switch-input test...')
-    for sw_states in test_sw_states:
-        demand = get_servo_demand(sw_states, switch_servos)
-        print(f'servo demand: {demand}')
-        settings = await servo_group.match_demand(demand)
-        print(f'gather return: {settings}')
-        gc.collect()  # garbage collect while not busy
-        sleep_ms(2_000)  # pause between settings
+    asyncio.create_task(servo_group.match_demand())
+    await switch_group.run_states()
     print('test complete')
 
 

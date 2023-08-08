@@ -8,7 +8,7 @@ class KeyBuffer:
     """ single item buffer
         - similar interface to Queue
         - Event.set() "must be called from within a task"
-        - hence add() and pop() as coros
+        - hence add() and pop() are coros
     """
     
     def __init__(self):
@@ -69,6 +69,7 @@ class KeyPad(SwitchMatrix):
 
     async def key_input(self):
         """ detect single key-press in switch matrix """
+        key_ = None
         new_press = True
         # poll switches
         while True:
@@ -76,13 +77,17 @@ class KeyPad(SwitchMatrix):
             if node is None:
                 new_press = True  # previous key released
             elif new_press:
-                await self.buffer.add(self.key_values[node])
+                key_ = self.key_values[node]
+                if key_ == '*':
+                    break  # end while loop
+                await self.buffer.add(key_)
                 new_press = False  # supress repeat readings
             await asyncio.sleep_ms(20)
 
 
 async def print_buffer(buffer):
     """ consumer: demonstrate buffered input """
+    print('Waiting for keypad input...')
     while True:
         # is_data set when an item is added to buffer
         await buffer.is_data.wait()
@@ -95,8 +100,9 @@ async def main():
     cols = (8, 9, 10, 11)
     rows = (12, 13, 14, 15)
 
-    kp = KeyPad(cols, rows, KeyBuffer())
-    asyncio.create_task(print_buffer(kp.buffer))
+    buffer = KeyBuffer()
+    kp = KeyPad(cols, rows, buffer)
+    asyncio.create_task(print_buffer(buffer))
     await kp.key_input()
 
 

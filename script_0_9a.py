@@ -184,7 +184,7 @@ class ServoGroup:
         for i, srv_id in enumerate(demand):
             servo_ = self.servos[srv_id]
             # coros will not run until awaited
-            tasks[i] = servo_.set_on_off(demand[srv_id])
+            tasks[i] = servo_.move_servo(demand[srv_id])
         # code for 'concurrent' setting
         result = await asyncio.gather(*tasks)
         return result  # for testing

@@ -26,7 +26,7 @@ class ServoSG9x(PWM):
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)  # include for offset degrees
     DEG_MAX = const(180)
-    NS_PER_DEGREE = const((PW_MAX - PW_MIN) // (DEG_MAX - DEG_MIN))
+    NS_PER_DEGREE = const(11_111)
 
     OFF = const(0)
     ON = const(1)
@@ -45,10 +45,9 @@ class ServoSG9x(PWM):
         # for pulse restoration
         self.pw_ns = None
         self.state = None
-        # for servo "stepper" algorithm
         self.x_steps = 100
         self._step_ms = self.transition_ms // self.x_steps
-        self._pw_step_inc = (self.on_ns - self.off_ns) // self.x_steps
+        # self._pw_step_inc = (self.on_ns - self.off_ns) // self.x_steps
 
     def degrees_to_ns(self, degrees):
         """ convert float degrees to int pulse-width ns """
@@ -69,35 +68,23 @@ class ServoSG9x(PWM):
         self.pw_ns = self.on_ns
         self.state = self.ON
 
-    async def stepper(self, pw_inc):
-        """ move servo in linear steps with pause ms per step """
-        pw = self.pw_ns
-        pause = self._step_ms
-        for _ in range(self.x_steps):
-            pw += pw_inc
+    async def move_servo(self, start_ns, demand_ns):
+        """ move servo from start_ns to demand_ns """
+        x_steps = self.x_steps
+        step_pause = self._step_ms
+        inc_ns = (demand_ns - start_ns) // x_steps
+        # restore PWM
+        self.duty_ns(start_ns)
+        pw = start_ns
+        for _ in range(x_steps - 1):
+            pw += inc_ns
             self.duty_ns(pw)
-            await asyncio.sleep_ms(pause)
-
-    async def set_on_off(self, demand_state):
-        """ move servo to off or on position """
-        # set parameters
-        if demand_state == self.state:
-            return
-        elif demand_state == self.OFF:
-            inc_ns = -self._pw_step_inc
-            demand_ns = self.off_ns
-        elif demand_state == self.ON:
-            inc_ns = self._pw_step_inc
-            demand_ns = self.on_ns
-        else:
-            return
-        # move servo
-        self.duty_ns(self.pw_ns)  # optional
-        await self.stepper(inc_ns)
+            await asyncio.sleep_ms(step_pause)
+        self.duty_ns(demand_ns)
+        await asyncio.sleep_ms(step_pause)
+        self.pw_ns = demand_ns  # pulse-width set
+        # stop PWM output
         self.duty_ns(0)
-        # save final state for next move
-        self.pw_ns = demand_ns
-        self.state = demand_state
         return self.state  # for testing
 
 
@@ -130,11 +117,17 @@ class ServoGroup:
             servo.duty_ns(0)
 
     async def match_demand(self, demand):
-        """ coro: move each servo to match switch demands """
-        # asyncio.gather(): awaits completion of all tasks
+        """ coro: match servo positions to on/off switch demands """
         tasks = []
-        for id_, setting in demand.items():
-            tasks.append(self.id_servo[id_].set_on_off(setting))
+        for id_ in demand:
+            servo = self.id_servo[id_]
+            srv_demand = demand[id_]
+            if servo.state == srv_demand:
+                continue  # already at demand state
+            demand_ns = servo.on_ns if srv_demand == servo.ON else servo.off_ns
+            tasks.append(servo.move_servo(servo.pw_ns, demand_ns))
+            servo.state = srv_demand  # save new demand state
+        # gather() awaits completion of all tasks in list
         result = await asyncio.gather(*tasks)
         return result  # for testing
 
@@ -152,7 +145,7 @@ async def main():
     print('In main()')
 
     def get_servo_demand(sw_states_, switch_servos_):
-        """ return dict; servo_id: demand """
+        """ return dict- servo_id: demand """
         servo_demand = {}
         for key in sw_states_:
             sw_demand = sw_states_[key]
@@ -164,8 +157,6 @@ async def main():
 
     # (simulated) switch test states; id: state
     test_sw_states = (
-        {16: 0, 17: 1, 18: 1},
-        {16: 1, 17: 0, 18: 0},
         {16: 0, 17: 1, 18: 1},
         {16: 1, 17: 0, 18: 0},
         {16: 0, 17: 1, 18: 1},
@@ -194,7 +185,6 @@ async def main():
     # === end of parameters
 
     servo_group = ServoGroup(servo_params)
-    print(servo_group)
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('run switch-input test...')

@@ -42,8 +42,6 @@ class ServoSG9x(PWM):
         self.off_ns = self.degrees_to_ns(off_deg)
         self.on_ns = self.degrees_to_ns(on_deg)
         self.transition_ms = int(transition_time * 1000)
-        # for pulse restoration
-        self.pw_ns = None
         self.state = None
         self.x_steps = 100
         self._step_ms = self.transition_ms // self.x_steps
@@ -59,31 +57,29 @@ class ServoSG9x(PWM):
     def set_off(self):
         """ move direct to off position; set object attributes """
         self.duty_ns(self.off_ns)
-        self.pw_ns = self.off_ns
         self.state = self.OFF
+        self.duty_ns(0)
+        sleep_ms(self.SERVO_WAIT)
 
     def set_on(self):
         """ move direct to on position; set object attributes """
         self.duty_ns(self.on_ns)
-        self.pw_ns = self.on_ns
         self.state = self.ON
+        sleep_ms(self.SERVO_WAIT)
 
-    async def move_servo(self, start_ns, demand_ns):
+    async def move_servo(self, pw, demand_pw):
         """ move servo from start_ns to demand_ns """
-        x_steps = self.x_steps
-        step_pause = self._step_ms
-        inc_ns = (demand_ns - start_ns) // x_steps
+        inc_ns = (demand_pw - pw) // self.x_steps
+        step_pause = self._step_ms  # reduce dict look-ups
         # restore PWM
-        self.duty_ns(start_ns)
-        pw = start_ns
-        for _ in range(x_steps - 1):
+        self.duty_ns(pw)
+        for _ in range(self.x_steps - 1):
             pw += inc_ns
             self.duty_ns(pw)
             await asyncio.sleep_ms(step_pause)
-        self.duty_ns(demand_ns)
+        self.duty_ns(demand_pw)  # precise final setting
         await asyncio.sleep_ms(step_pause)
-        self.pw_ns = demand_ns  # pulse-width set
-        # stop PWM output
+        # stop PWM
         self.duty_ns(0)
         return self.state  # for testing
 
@@ -109,12 +105,10 @@ class ServoGroup:
         """
         for id_ in servo_init_:
             servo = self.id_servo[id_]
-            if servo_init_[id_] == 1:
+            if servo_init_[id_] == servo.ON:
                 servo.set_on()
             else:
                 servo.set_off()
-            sleep_ms(500)  # allow movement time
-            servo.duty_ns(0)
 
     async def match_demand(self, demand):
         """ coro: match servo positions to on/off switch demands """
@@ -124,8 +118,15 @@ class ServoGroup:
             srv_demand = demand[id_]
             if servo.state == srv_demand:
                 continue  # already at demand state
-            demand_ns = servo.on_ns if srv_demand == servo.ON else servo.off_ns
-            tasks.append(servo.move_servo(servo.pw_ns, demand_ns))
+            if srv_demand == servo.ON:
+                current_ns = servo.off_ns
+                demand_ns = servo.on_ns
+            elif srv_demand == servo.OFF:
+                current_ns = servo.on_ns
+                demand_ns = servo.off_ns
+            else:
+                continue
+            tasks.append(servo.move_servo(current_ns, demand_ns))
             servo.state = srv_demand  # save new demand state
         # gather() awaits completion of all tasks in list
         result = await asyncio.gather(*tasks)

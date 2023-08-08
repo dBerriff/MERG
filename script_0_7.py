@@ -70,10 +70,10 @@ class ServoSG9x(PWM):
         self.state = self.ON
         sleep_ms(self.SERVO_WAIT)
 
-    async def move_servo(self, demand_pw):
+    async def move_servo(self, demand_ns):
         """ move servo from start_ns to demand_ns """
         pw = self.pw_ns
-        inc_ns = (demand_pw - pw) // self.x_steps
+        inc_ns = (demand_ns - pw) // self.x_steps
         step_pause = self._step_ms  # reduce dict look-ups
         # restore PWM
         self.duty_ns(pw)
@@ -81,12 +81,11 @@ class ServoSG9x(PWM):
             pw += inc_ns
             self.duty_ns(pw)
             await asyncio.sleep_ms(step_pause)
-        self.duty_ns(demand_pw)  # precise final setting
+        self.duty_ns(demand_ns)  # precise final setting
         await asyncio.sleep_ms(step_pause)
-        self.pw_ns = demand_pw
+        self.pw_ns = demand_ns
         # stop PWM
         self.duty_ns(0)
-        return self.state  # for testing
 
 
 class ServoGroup:

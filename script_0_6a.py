@@ -69,7 +69,6 @@ class KeyPad(SwitchMatrix):
 
     async def key_input(self):
         """ detect single key-press in switch matrix """
-        key_ = None
         new_press = True
         # poll switches
         while True:
@@ -78,8 +77,6 @@ class KeyPad(SwitchMatrix):
                 new_press = True  # previous key released
             elif new_press:
                 key_ = self.key_values[node]
-                if key_ == '*':
-                    break  # end while loop
                 await self.buffer.add(key_)
                 new_press = False  # supress repeat readings
             await asyncio.sleep_ms(20)
@@ -96,7 +93,7 @@ async def print_buffer(buffer):
 
 
 async def main():
-    # RPi Pico pin assignments
+    # KeyPad: RPi Pico pin assignments
     cols = (8, 9, 10, 11)
     rows = (12, 13, 14, 15)
 

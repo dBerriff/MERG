@@ -58,17 +58,19 @@ class KeyPad(SwitchMatrix):
     """ process matrix keypad input
         - output key-value to Buffer object
     """
-    key_values = {0: '1', 1: '2', 2: '3', 3: 'A',
-                  16: '4', 17: '5', 18: '6', 19: 'B',
-                  32: '7', 33: '8', 34: '9', 35: 'C',
-                  48: '*', 49: '0', 50: '#', 51: 'D'}
+    # hex values relate directly to column and row numbers
+    key_values = {0x00: '1', 0x01: '2', 0x02: '3', 0x03: 'A',
+                  0x10: '4', 0x11: '5', 0x12: '6', 0x13: 'B',
+                  0x20: '7', 0x21: '8', 0x22: '9', 0x23: 'C',
+                  0x30: '*', 0x31: '0', 0x32: '#', 0x33: 'D'
+                  }
 
     def __init__(self, cols, rows, buffer):
         super().__init__(cols, rows)
         self.buffer = buffer
 
     async def key_input(self):
-        """ detect single key-press in switch matrix """
+        """ coro: detect single key-press in switch matrix """
         new_press = True
         # poll switches
         while True:

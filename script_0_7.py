@@ -7,7 +7,6 @@
 import uasyncio as asyncio  # cooperative multitasking
 from machine import Pin, PWM
 from time import sleep_ms
-import gc  # garbage collection
 
 
 class ServoSG9x(PWM):
@@ -181,7 +180,6 @@ class DataBuffer:
         """ add item to buffer """
         self._item = item
         self.is_data.set()
-
 
     async def pop(self):
         """ remove item from buffer """

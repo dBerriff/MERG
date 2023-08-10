@@ -10,17 +10,18 @@ import uasyncio as asyncio
 from machine import Pin
 
 
-async def blink(led, period=1100):
+async def blink(led, period=1000):
     """ coro: blink the onboard LED
         - earlier versions of MicroPython require
           25 rather than 'LED' if not Pico W
     """
     # flash LED every period ms approx.
-    off_ms = period - 100
+    on_time = 100
+    off_ms = period - on_time
     while True:
         led.on()
-        await asyncio.sleep_ms(100)  # allow other tasks to run
-        led._off()
+        await asyncio.sleep_ms(on_time)  # allow other tasks to run
+        led.off()
         await asyncio.sleep_ms(off_ms)
 
 
@@ -37,7 +38,7 @@ async def main():
     onboard = Pin('LED', Pin.OUT, value=0)
     asyncio.create_task(blink(onboard))  # scheduled but does not block locally
     # await blocks locally but allows scheduler to run other tasks
-    await print_numbers(10)
+    await print_numbers(25)
     print('print_numbers() completed')
     onboard.off()
 

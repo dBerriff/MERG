@@ -77,7 +77,7 @@ class KeyPad(SwitchMatrix):
                 new_press = True  # previous key released
             elif new_press:
                 key_ = self.key_values[node]
-                await self.buffer.add(key_)
+                await self.buffer.put(key_)
                 new_press = False  # supress repeat readings
             await asyncio.sleep_ms(20)
 
@@ -88,7 +88,7 @@ async def print_buffer(buffer):
     while True:
         # is_data set when an item is added to buffer
         await buffer.is_data.wait()
-        char = await buffer.pop()
+        char = await buffer.get()
         print(char)
 
 

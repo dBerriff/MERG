@@ -47,7 +47,7 @@ class Button:
                     hold_t = ticks_diff(time_stamp, on_time)
                     event = 1 if hold_t < Button.hold_min else 2
                     await self.q_out.is_space.wait()  # space in queue?
-                    await self.q_out.add((self.id_ << 2) + event)
+                    await self.q_out.put((self.id_ << 2) + event)
                 else:
                     on_time = time_stamp
                 prev_state = state
@@ -59,7 +59,7 @@ async def button_event(q_btn_event):
     run = True
     while run:
         await q_btn_event.is_data.wait()
-        btn_data = await q_btn_event.pop()
+        btn_data = await q_btn_event.get()
         btn_id = btn_data >> 2
         btn_event = btn_data & 0b11
         print(f'button: {btn_id} value: {btn_event}')

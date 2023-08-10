@@ -1,5 +1,8 @@
 """
     set servos from switch input test values
+    - add toggle_state() method
+    - calling code should await motion completion
+    - there is no lock against multiple setting tasks
     - servos are set asynchronously
     - servo pins provide unique id's
 """
@@ -7,7 +10,6 @@
 import uasyncio as asyncio  # cooperative multitasking
 from machine import Pin, PWM
 from time import sleep_ms
-import gc  # garbage collection
 
 
 class ServoSG9x(PWM):
@@ -60,8 +62,8 @@ class ServoSG9x(PWM):
         self.duty_ns(self.off_ns)
         self.pw_ns = self.off_ns
         self.state = self.OFF
-        self.duty_ns(0)
         sleep_ms(self.SERVO_WAIT)
+        self.duty_ns(0)
 
     def set_on(self):
         """ move direct to on position; set object attributes """
@@ -69,9 +71,20 @@ class ServoSG9x(PWM):
         self.pw_ns = self.on_ns
         self.state = self.ON
         sleep_ms(self.SERVO_WAIT)
+        self.duty_ns(0)
 
+    async def move_on(self):
+        """ move to ON state"""
+        await self.move_servo(self.on_ns)
+        self.state = self.ON
+        
+    async def move_off(self):
+        """ move to OFF state"""
+        await self.move_servo(self.off_ns)
+        self.state = self.OFF
+        
     async def move_servo(self, demand_ns):
-        """ move servo from start_ns to demand_ns """
+        """ move servo from self.pw_ns to demand_ns """
         pw = self.pw_ns
         inc_ns = (demand_ns - pw) // self.x_steps
         step_pause = self._step_ms  # reduce dict look-ups
@@ -119,17 +132,18 @@ class ServoGroup:
         """ coro: match servo positions to on/off switch demands """
         while True:
             await self.buffer.is_data.wait()
-            demand = await self.buffer.pop()
+            demand = await self.buffer.get()
             print(f'match demand: {demand}')
             tasks = []
             for id_ in demand:
                 servo = self.id_servo[id_]
                 srv_demand = demand[id_]
-                if servo.state == srv_demand:
-                    continue  # already at demand state
-                demand_ns = servo.on_ns if srv_demand == servo.ON else servo.off_ns
-                tasks.append(servo.move_servo(demand_ns))
-                servo.state = srv_demand  # save new demand state
+                if srv_demand == servo.state:
+                    continue
+                elif srv_demand == servo.ON:
+                    tasks.append(servo.move_on())
+                elif srv_demand == servo.OFF:
+                    tasks.append(servo.move_off())
             await asyncio.gather(*tasks)
 
     def __str__(self):
@@ -162,7 +176,7 @@ class SwitchGroup:
         """ run through a set of switch states """
         for state in self.sw_states:
             demand = self.get_servo_demand(state)
-            await self.data_buffer.add(demand)
+            await self.data_buffer.put(demand)
             await asyncio.sleep_ms(5_000)  # pause between settings
 
 
@@ -177,13 +191,12 @@ class DataBuffer:
         self._item = None
         self.is_data = asyncio.Event()
 
-    async def add(self, item):
+    async def put(self, item):
         """ add item to buffer """
         self._item = item
         self.is_data.set()
 
-
-    async def pop(self):
+    async def get(self):
         """ remove item from buffer """
         self.is_data.clear()
         return self._item
@@ -216,6 +229,7 @@ async def main():
         {16: 0, 17: 1, 18: 1},
         {16: 1, 17: 0, 18: 0},
         {16: 0, 17: 1, 18: 1},
+        {16: 0, 17: 0, 18: 0},
         {16: 0, 17: 0, 18: 0},
         {16: 1, 17: 1, 18: 1},
         {16: 0, 17: 0, 18: 0}

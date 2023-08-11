@@ -176,7 +176,7 @@ class SwitchGroup:
         for state in self.sw_states:
             demand = self.get_servo_demand(state)
             await self.data_buffer.put(demand)
-            await asyncio.sleep_ms(5_000)  # pause between settings
+            await asyncio.sleep_ms(4_000)  # pause between settings
 
 
 class DataBuffer:

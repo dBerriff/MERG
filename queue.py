@@ -22,7 +22,7 @@ class Queue:
         self.is_space = asyncio.Event()
         self.is_space.set()
 
-    async def add(self, item):
+    async def put(self, item):
         """ add item to the queue """
         next_ = self.next
         self.queue[next_] = item
@@ -32,7 +32,7 @@ class Queue:
         self.next = next_
         self.is_data.set()
 
-    async def pop(self):
+    async def get(self):
         """ remove item from the queue """
         head_ = self.head
         item = self.queue[head_]
@@ -70,12 +70,12 @@ async def main():
         """ fill queue with test integers """
         for i in range(n):
             await queue.is_space.wait()
-            await queue.add(i)
+            await queue.put(i)
         
     async def empty_q(q_):
         """ empty and print queue elements """
         while queue.is_data.is_set():
-            p = await queue.pop()
+            p = await queue.get()
             print(p, q_.q_len)
             await asyncio.sleep_ms(0)
 

@@ -77,12 +77,14 @@ class ServoSG9x(PWM):
         """ move to ON state"""
         await self.move_servo(self.on_ns)
         self.state = self.ON
+        return f'servo {self.id}: ON'
         
     async def move_off(self):
         """ move to OFF state"""
         await self.move_servo(self.off_ns)
         self.state = self.OFF
-        
+        return f'servo {self.id}: OFF'
+
     async def move_servo(self, demand_ns):
         """ move servo from self.pw_ns to demand_ns """
         pw = self.pw_ns
@@ -128,8 +130,8 @@ class ServoGroup:
     async def match_demand(self):
         """ coro: match servo positions to on/off switch demands """
         while True:
-            await self.buffer.is_data.wait()
             demand = await self.buffer.get()
+            print()
             print(f'match demand: {demand}')
             tasks = []
             for id_ in demand:
@@ -141,7 +143,9 @@ class ServoGroup:
                     tasks.append(servo.move_on())
                 elif srv_demand == servo.OFF:
                     tasks.append(servo.move_off())
-            await asyncio.gather(*tasks)
+            result = await asyncio.gather(*tasks)
+            print(result)
+            await asyncio.sleep_ms(1000)
 
     def __str__(self):
         """ print out servo parameters """
@@ -176,7 +180,10 @@ class SwitchGroup:
         for state in self.sw_states:
             demand = self.get_servo_demand(state)
             await self.data_buffer.put(demand)
-            await asyncio.sleep_ms(4_000)  # pause between settings
+        while True:
+            await asyncio.sleep_ms(10_000)
+            print()
+            print('test finished')
 
 
 class DataBuffer:
@@ -189,16 +196,26 @@ class DataBuffer:
     def __init__(self):
         self._item = None
         self.is_data = asyncio.Event()
+        self.is_space = asyncio.Event()
+        self.put_lock = asyncio.Lock()
+        self.get_lock = asyncio.Lock()
+        self.is_space.set()
 
-    async def put(self, item):
+    async def put(self, item_):
         """ add item to buffer """
-        self._item = item
-        self.is_data.set()
+        async with self.put_lock:
+            await self.is_space.wait()
+            self._item = item_
+            self.is_space.clear()
+            self.is_data.set()
 
     async def get(self):
         """ remove item from buffer """
-        self.is_data.clear()
-        return self._item
+        async with self.get_lock:
+            await self.is_data.wait()
+            self.is_data.clear()
+            self.is_space.set()
+            return self._item
 
 
 async def main():
@@ -241,8 +258,8 @@ async def main():
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('run switch-input test...')
-    asyncio.create_task(servo_group.match_demand())
-    await switch_group.run_states()
+    asyncio.create_task(switch_group.run_states())
+    await servo_group.match_demand()
     print('test complete')
 
 

@@ -103,10 +103,7 @@ class ServoSG9x(PWM):
 
 class ServoGroup:
     """ create a list of servo objects for servo control
-        - index: servo-object
-        - switch_servos_ binds each servo to a specific switch input
-        - could use the list index to reference a servo, but
-        - a dictionary implements a more general approach
+        - dict of index: servo-object
     """
 
     def __init__(self, servo_parameters, buffer):
@@ -156,7 +153,9 @@ class ServoGroup:
 
 
 class SwitchGroup:
-    """ switch states to set servos """
+    """ switch states to set servos
+        - switch_servos_ binds each switch to a list of servos
+    """
 
     def __init__(self, sw_states, switch_servos, data_buffer):
         self.sw_states = sw_states

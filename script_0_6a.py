@@ -109,7 +109,7 @@ async def print_buffer(buffer):
         if char == '*' and prev_char == '*':
             break
         prev_char = char
-    print('break from print_buffer')
+    print('break from print_buffer()')
 
 
 async def main():

@@ -1,8 +1,8 @@
 """
     set servos from switch input test values
-    - add toggle_state() method
     - calling code should await motion completion
-    - there is no lock against multiple setting tasks
+    - Lock added to DataBuffer;
+    - supports multiple setting producers
     - servos are set asynchronously
     - servo pins provide unique id's
 """

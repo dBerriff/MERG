@@ -1,8 +1,7 @@
 """
     set servos from switch input test values
-    - calling code should await motion completion
-    - Lock added to DataBuffer;
-    - supports multiple setting producers
+    - Lock added to DataBuffer put():
+        supports multiple data producers
     - servos are set asynchronously
     - servo pins provide unique id's
 """
@@ -74,16 +73,16 @@ class ServoSG9x(PWM):
         self.duty_ns(0)
 
     async def move_on(self):
-        """ move to ON state"""
+        """ move from current to ON state"""
         await self.move_servo(self.on_ns)
         self.state = self.ON
-        return f'servo {self.id}: ON'
+        return f'servo {self.id}: ON'  # for testing/demonstration
         
     async def move_off(self):
-        """ move to OFF state"""
+        """ move from current to OFF state"""
         await self.move_servo(self.off_ns)
         self.state = self.OFF
-        return f'servo {self.id}: OFF'
+        return f'servo {self.id}: OFF'  # for testing/demonstration
 
     async def move_servo(self, demand_ns):
         """ move servo from self.pw_ns to demand_ns """
@@ -130,6 +129,7 @@ class ServoGroup:
     async def match_demand(self):
         """ coro: match servo positions to on/off switch demands """
         while True:
+            # data consumer
             demand = await self.buffer.get()
             print()
             print(f'match demand: {demand}')
@@ -138,7 +138,7 @@ class ServoGroup:
                 servo = self.id_servo[id_]
                 srv_demand = demand[id_]
                 if srv_demand == servo.state:
-                    continue
+                    continue  # already at demand setting
                 elif srv_demand == servo.ON:
                     tasks.append(servo.move_on())
                 elif srv_demand == servo.OFF:
@@ -177,10 +177,12 @@ class SwitchGroup:
 
     async def run_states(self):
         """ run through a set of switch states """
+        # data producer
         for state in self.sw_states:
             demand = self.get_servo_demand(state)
             await self.data_buffer.put(demand)
-        while True:
+        # producer would normally run forever, but end this test
+        for _ in range(2):
             await asyncio.sleep_ms(10_000)
             print()
             print('test finished')
@@ -190,7 +192,9 @@ class DataBuffer:
     """ single item buffer
         - similar interface to Queue
         - Event.set() "must be called from within a task"
-        - hence add() and pop() as coros
+        - hence put() and get() as coros
+        - put_lock supports multiple producers
+        - single consumer assumed
     """
 
     def __init__(self):
@@ -198,7 +202,6 @@ class DataBuffer:
         self.is_data = asyncio.Event()
         self.is_space = asyncio.Event()
         self.put_lock = asyncio.Lock()
-        self.get_lock = asyncio.Lock()
         self.is_space.set()
 
     async def put(self, item_):
@@ -211,11 +214,10 @@ class DataBuffer:
 
     async def get(self):
         """ remove item from buffer """
-        async with self.get_lock:
-            await self.is_data.wait()
-            self.is_data.clear()
-            self.is_space.set()
-            return self._item
+        await self.is_data.wait()
+        self.is_data.clear()
+        self.is_space.set()
+        return self._item
 
 
 async def main():
@@ -258,8 +260,10 @@ async def main():
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('run switch-input test...')
-    asyncio.create_task(switch_group.run_states())
-    await servo_group.match_demand()
+    # start consumer
+    asyncio.create_task(servo_group.match_demand())
+    # start producer
+    await switch_group.run_states()
     print('test complete')
 
 

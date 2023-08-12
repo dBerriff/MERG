@@ -9,19 +9,32 @@ class KeyBuffer:
         - similar interface to Queue
         - Event.set() "must be called from within a task"
         - hence add() and pop() are coros
+        - put_lock added for consistency with queue:
+            supports multiple data producers
     """
     
     def __init__(self):
         self._item = None
         self.is_data = asyncio.Event()
+        self.is_space = asyncio.Event()
+        self.put_lock = asyncio.Lock()
+        self.is_space.set()
     
-    async def add(self, item):
-        """ add item to buffer """
-        self._item = item
-        self.is_data.set()
+    async def put(self, item):
+        """ add item to buffer
+            - demonstrates use of async Lock()
+        """
+        async with self.put_lock:
+            # only one task can acquire the lock at any one time
+            await self.is_space.wait()
+            self._item = item
+            self.is_data.set()
+            self.is_space.clear()
 
-    async def pop(self):
+    async def get(self):
         """ remove item from buffer """
+        await self.is_data.wait()
+        self.is_space.set()
         self.is_data.clear()
         return self._item
 
@@ -70,7 +83,9 @@ class KeyPad(SwitchMatrix):
         self.buffer = buffer
 
     async def key_input(self):
-        """ coro: detect single key-press in switch matrix """
+        """ coro: detect single key-press in switch matrix
+                - data producer (put into buffer)
+        """
         new_press = True
         # poll switches
         while True:
@@ -87,11 +102,14 @@ class KeyPad(SwitchMatrix):
 async def print_buffer(buffer):
     """ consumer: demonstrate buffered input """
     print('Waiting for keypad input...')
+    prev_char = ''
     while True:
-        # is_data set when an item is added to buffer
-        await buffer.is_data.wait()
         char = await buffer.get()
         print(char)
+        if char == '*' and prev_char == '*':
+            break
+        prev_char = char
+    print('break from print_buffer')
 
 
 async def main():
@@ -101,8 +119,8 @@ async def main():
 
     buffer = KeyBuffer()
     kp = KeyPad(cols, rows, buffer)
-    asyncio.create_task(print_buffer(buffer))
-    await kp.key_input()
+    asyncio.create_task(kp.key_input())
+    await print_buffer(buffer)
 
 
 if __name__ == '__main__':

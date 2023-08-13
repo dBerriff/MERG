@@ -2,41 +2,7 @@
 
 from machine import Pin
 import uasyncio as asyncio
-
-
-class KeyBuffer:
-    """ single item buffer
-        - similar interface to Queue
-        - Event.set() "must be called from within a task"
-        - hence add() and pop() are coros
-        - put_lock added for consistency with queue:
-            supports multiple data producers
-    """
-    
-    def __init__(self):
-        self._item = None
-        self.is_data = asyncio.Event()
-        self.is_space = asyncio.Event()
-        self.put_lock = asyncio.Lock()
-        self.is_space.set()
-    
-    async def put(self, item):
-        """ add item to buffer
-            - demonstrates use of async Lock()
-        """
-        async with self.put_lock:
-            # only one task can acquire the lock at any one time
-            await self.is_space.wait()
-            self._item = item
-            self.is_data.set()
-            self.is_space.clear()
-
-    async def get(self):
-        """ remove item from buffer """
-        await self.is_data.wait()
-        self.is_space.set()
-        self.is_data.clear()
-        return self._item
+from queue import KeyBuffer
 
 
 class SwitchMatrix:

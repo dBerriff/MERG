@@ -1,25 +1,26 @@
 """ Queue class """
 
 import uasyncio as asyncio
-import array
 
 
-class QueueBase:
-    """ abstract base class for FIFO queue
+class Queue:
+    """ FIFO queue
         - is_data and is_space events control access
         - Event.set() "must be called from within a task",
           hence coros.
+        - using array rather than list gave no measurable advantages
+        - a larger queue length runs more slowly in this test
+            but might be required for specific input buffering
     """
 
     def __init__(self, length):
         self.length = length
-        self.queue = None
+        self.queue = [None] * length
         self.head = 0
         self.next = 0
         self.is_data = asyncio.Event()
         self.is_space = asyncio.Event()
         self.put_lock = asyncio.Lock()
-        self.get_lock = asyncio.Lock()
         self.is_space.set()
 
     async def put(self, item):
@@ -28,28 +29,23 @@ class QueueBase:
         """
         async with self.put_lock:
             await self.is_space.wait()
-            next_ = self.next
-            self.queue[next_] = item
-            next_ = (next_ + 1) % self.length
-            if next_ == self.head:
+            self.queue[self.next] = item
+            self.next = (self.next + 1) % self.length
+            if self.next == self.head:
                 self.is_space.clear()
-            self.next = next_
             self.is_data.set()
 
     async def get(self):
         """ remove item from the queue
-            - Lock required if multiple get tasks
+            - single consumer assumed
         """
-        async with self.get_lock:
-            await self.is_data.wait()
-            head_ = self.head
-            item = self.queue[head_]
-            head_ = (head_ + 1) % self.length
-            if head_ == self.next:
-                self.is_data.clear()
-            self.head = head_
-            self.is_space.set()
-            return item
+        await self.is_data.wait()
+        item = self.queue[self.head]
+        self.head = (self.head + 1) % self.length
+        if self.head == self.next:
+            self.is_data.clear()
+        self.is_space.set()
+        return item
 
     @property
     def q_len(self):
@@ -70,23 +66,33 @@ class QueueBase:
         print(q_str)
 
 
-class QueueArray(QueueBase):
-    """ queue as array of specified object type
-        - more efficient than a list of objects but limited types
-        - selected type-codes for unsigned int values:
-            'B' 1-byte; 'I' 2-byte; 'L' 4-byte
+class KeyBuffer:
+    """ single item buffer
+        - similar interface to Queue
+        - put_lock supports multiple data producers
     """
+    
+    def __init__(self):
+        self._item = None
+        self.is_data = asyncio.Event()
+        self.is_space = asyncio.Event()
+        self.put_lock = asyncio.Lock()
+        self.is_space.set()
+    
+    async def put(self, item):
+        """ add item to buffer """
+        async with self.put_lock:
+            await self.is_space.wait()
+            self._item = item
+            self.is_data.set()
+            self.is_space.clear()
 
-    def __init__(self, length, type_code):
-        super().__init__(length)
-        self.queue = array.array(type_code, [0] * length)
-
-
-class QueueList(QueueBase):
-    """ queue as list of objects """
-    def __init__(self, length):
-        super().__init__(length)
-        self.queue = [None] * length
+    async def get(self):
+        """ remove item from buffer - single consumer assumed """
+        await self.is_data.wait()
+        self.is_space.set()
+        self.is_data.clear()
+        return self._item
 
 
 async def main():
@@ -105,16 +111,21 @@ async def main():
             p = await q_.get()
             p_list.append(p)
             await asyncio.sleep_ms(1)  # let fill_q() get run
-        print('unsorted gets')
-        print(p_list)
-        p_list.sort()
-        print('sorted gets')
-        print(p_list)
+        return p_list
 
-    queue = QueueArray(8, 'B')
+    # test KeyBuffer or Queue with 2 producers
+    queue = KeyBuffer()
+    # queue = Queue(8)
+
     task0 = asyncio.create_task(fill_q(queue, 0, 20))
     task1 = asyncio.create_task(fill_q(queue, 50, 100))
-    await asyncio.create_task(empty_q(queue))
+    q_data = await asyncio.create_task(empty_q(queue))
+    print('unsorted gets')
+    print(q_data)
+    q_data.sort()
+    print('sorted gets')
+    print(q_data)
+
     task0.cancel()
     task1.cancel()
 

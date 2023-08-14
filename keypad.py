@@ -76,7 +76,7 @@ class KeyPad(SwitchMatrix):
             self.key_list.append(Key(self.key_values[index]))
 
     async def key_input(self):
-        """ coro: detect single key-press in switch matrix
+        """ coro: detect key-press in switch matrix
                 - data producer (put char into buffer)
                 - no other processing in this demo
         """

@@ -23,8 +23,10 @@ class SwitchMatrix:
             [Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in rows])
         for pin in self.col_pins:
             pin.low()  # set all columns to off
-        self._array_length = len(cols) * len(rows)
-        self.matrix = array.array(
+        self.n_cols = len(cols)
+        self.n_rows = len(rows)
+        self._array_length = self.n_cols * self.n_rows
+        self.m_array = array.array(
             SwitchMatrix.type_code, [0] * self._array_length)
 
     def scan_matrix(self):
@@ -33,10 +35,10 @@ class SwitchMatrix:
         for c_pin in self.col_pins:
             c_pin.high()
             for r_pin in self.row_pins:
-                self.matrix[index] = r_pin.value()
+                self.m_array[index] = r_pin.value()
                 index += 1
             c_pin.low()
-        return self.matrix
+        return self.m_array
 
     def __len__(self):
         return self._array_length
@@ -45,8 +47,10 @@ class SwitchMatrix:
 class Key:
     """ keypad key-switch """
     
-    def __init__(self, char):
+    def __init__(self, col, row, char):
         # self.index = index
+        self.col = col
+        self.row = row
         self._char = char
         self.state = 0
         self.pressed = False
@@ -55,6 +59,9 @@ class Key:
     @property
     def char(self):
         return self._char
+    
+    def __str__(self):
+        return f'col: {self.col}, row: {self.row}, char: {self.char}'
 
 
 class KeyPad(SwitchMatrix):
@@ -64,18 +71,21 @@ class KeyPad(SwitchMatrix):
         - key-press time saved as ticks_ms for future development
     """
     # (col, row) order
-    key_values = ('1', '2', '3', 'A',
-                  '4', '5', '6', 'B',
-                  '7', '8', '9', 'C',
-                  '*', '0', '#', 'D'
-                  )
+    key_char_list = ('1', '2', '3', 'A',
+                     '4', '5', '6', 'B',
+                     '7', '8', '9', 'C',
+                     '*', '0', '#', 'D'
+                     )
 
     def __init__(self, cols, rows, buffer):
         super().__init__(cols, rows)
         self.buffer = buffer
         self.key_list = []
-        for index in range(self._array_length):
-            self.key_list.append(Key(self.key_values[index]))
+        index = 0
+        for row in range(self.n_rows):
+            for col in range(self.n_cols):
+                self.key_list.append(Key(col, row, self.key_char_list[index]))
+                index += 1
 
     async def key_input(self):
         """ coro: detect key-press in switch matrix
@@ -103,7 +113,7 @@ async def print_buffer(buffer):
     print('Waiting for keypad input...')
     while True:
         char = await buffer.get()
-        print(f'char: {char} consumed by print_buffer()')
+        print(f'char: {char} from buffer')
 
 
 async def main():
@@ -113,6 +123,8 @@ async def main():
 
     buffer = KeyBuffer()
     kp = KeyPad(cols, rows, buffer)
+    for key in kp.key_list:
+        print(key)
     asyncio.create_task(print_buffer(buffer))
     await kp.key_input()
 

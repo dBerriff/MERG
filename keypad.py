@@ -61,7 +61,7 @@ class KeyPad(SwitchMatrix):
     """ process matrix keypad input
         - output key-value to Buffer object
     """
-    # hex values relate directly to column and row numbers
+    # (column, row) order
     key_values = ('1', '2', '3', 'A',
                   '4', '5', '6', 'B',
                   '7', '8', '9', 'C',

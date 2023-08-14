@@ -9,7 +9,7 @@ from time import ticks_ms
 
 class SwitchMatrix:
     """ matrix of up to 16 x 16 switched nodes
-        - data returned as linear array (col, row)
+        - matrix data returned as linear array (col, row)
         - array type-codes for unsigned int values:
           'B' 1-byte; 'I' 2-byte; 'L' 4-byte
     """
@@ -61,6 +61,7 @@ class KeyPad(SwitchMatrix):
     """ process matrix keypad input
         - output key-value to Buffer object
         - matrix nodes and key objects matched in (col, row) order
+        - key-press time saved as ticks_ms for future development
     """
     # (col, row) order
     key_values = ('1', '2', '3', 'A',

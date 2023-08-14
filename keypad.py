@@ -2,43 +2,41 @@
 
 from machine import Pin
 import uasyncio as asyncio
-import array
 from queue import KeyBuffer
 from time import ticks_ms
 
 
 class SwitchMatrix:
     """ matrix of up to 16 x 16 switched nodes
-        - matrix data returned as linear array (col, row)
-        - array type-codes for unsigned int values:
-          'B' 1-byte; 'I' 2-byte; 'L' 4-byte
+        - matrix data returned as linear list index: (row * n_cols + col)
+        - switch each matrix row ON and scan each column for input
+        - could use array rather than list...
     """
-    
-    type_code = 'B'  # single byte unsigned integer
     
     def __init__(self, cols, rows):
         self.col_pins = tuple(
-            [Pin(pin, mode=Pin.OUT) for pin in cols])
+            [Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in cols])
         self.row_pins = tuple(
-            [Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in rows])
-        for pin in self.col_pins:
-            pin.low()  # set all columns to off
+            [Pin(pin, mode=Pin.OUT) for pin in rows])
+        for pin in self.row_pins:
+            pin.low()  # set all rows to off
         self.n_cols = len(cols)
         self.n_rows = len(rows)
         self._array_length = self.n_cols * self.n_rows
-        self.m_array = array.array(
-            SwitchMatrix.type_code, [0] * self._array_length)
+        self.m_list = [0] * self._array_length
 
     def scan_matrix(self):
         """ scan matrix nodes """
+        # switch each row input high in sequence
         index = 0
-        for c_pin in self.col_pins:
-            c_pin.high()
-            for r_pin in self.row_pins:
-                self.m_array[index] = r_pin.value()
+        for r, r_pin in enumerate(self.row_pins):
+            r_pin.high()
+            for c, c_pin in enumerate(self.col_pins):
+                # check each col in sequence for switch closed
+                self.m_list[index] = c_pin.value()
                 index += 1
-            c_pin.low()
-        return self.m_array
+            r_pin.low()
+        return self.m_list
 
     def __len__(self):
         return self._array_length
@@ -96,6 +94,7 @@ class KeyPad(SwitchMatrix):
         while True:
             scan_time = ticks_ms()
             matrix_states = self.scan_matrix()
+            #print(matrix_states)
             for index in range(len(self)):
                 node_state = matrix_states[index]
                 key = self.key_list[index]
@@ -103,7 +102,6 @@ class KeyPad(SwitchMatrix):
                     key.state = 1
                     await self.buffer.put(key.char)
                     key.t_pressed = scan_time
-                    print(f'key: {key.char} pressed at {key.t_pressed}')
                 elif key.state == 1 and node_state == 0:
                     key.state = 0
             await asyncio.sleep_ms(200)
@@ -119,8 +117,9 @@ async def print_buffer(buffer):
 
 async def main():
     # KeyPad: RPi Pico pin assignments
-    cols = (8, 9, 10, 11)
-    rows = (12, 13, 14, 15)
+    cols = (12, 13, 14, 15)
+    rows = (8, 9, 10, 11)
+
 
     buffer = KeyBuffer()
     kp = KeyPad(cols, rows, buffer)

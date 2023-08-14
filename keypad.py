@@ -9,7 +9,7 @@ from time import ticks_ms
 
 class SwitchMatrix:
     """ matrix of up to 16 x 16 switched nodes
-        - data returned as linear array [cols * rows]
+        - data returned as linear array (col, row)
         - array type-codes for unsigned int values:
           'B' 1-byte; 'I' 2-byte; 'L' 4-byte
     """
@@ -60,8 +60,9 @@ class Key:
 class KeyPad(SwitchMatrix):
     """ process matrix keypad input
         - output key-value to Buffer object
+        - matrix nodes and key objects matched in (col, row) order
     """
-    # (column, row) order
+    # (col, row) order
     key_values = ('1', '2', '3', 'A',
                   '4', '5', '6', 'B',
                   '7', '8', '9', 'C',
@@ -77,7 +78,7 @@ class KeyPad(SwitchMatrix):
 
     async def key_input(self):
         """ coro: detect key-press in switch matrix
-                - data producer (put char into buffer)
+                - data producer: put char into buffer
                 - no other processing in this demo
         """
         # poll switches

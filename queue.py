@@ -80,7 +80,9 @@ class KeyBuffer:
         self.is_space.set()
     
     async def put(self, item):
-        """ add item to buffer """
+        """ add item to buffer
+            - Lock() allows multiple producers
+        """
         async with self.put_lock:
             await self.is_space.wait()
             self._item = item
@@ -88,7 +90,9 @@ class KeyBuffer:
             self.is_space.clear()
 
     async def get(self):
-        """ remove item from buffer - single consumer assumed """
+        """ remove item from buffer
+            - assumes single consumer
+        """
         await self.is_data.wait()
         self.is_space.set()
         self.is_data.clear()

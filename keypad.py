@@ -45,10 +45,11 @@ class SwitchMatrix:
 
 
 class Key:
-    """ keypad key-switch """
+    """ keypad key-switch
+        - key-press time saved as ticks_ms for future dev
+    """
     
     def __init__(self, col, row, char):
-        # self.index = index
         self.col = col
         self.row = row
         self._char = char
@@ -68,7 +69,6 @@ class KeyPad(SwitchMatrix):
     """ process matrix keypad input
         - output key-value to Buffer object
         - matrix nodes and key objects matched in (col, row) order
-        - key-press time saved as ticks_ms for future development
     """
     # (col, row) order
     key_char_list = ('1', '2', '3', 'A',
@@ -103,6 +103,7 @@ class KeyPad(SwitchMatrix):
                     key.state = 1
                     await self.buffer.put(key.char)
                     key.t_pressed = scan_time
+                    print(f'key: {key.char} pressed at {key.t_pressed}')
                 elif key.state == 1 and node_state == 0:
                     key.state = 0
             await asyncio.sleep_ms(200)

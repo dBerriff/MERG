@@ -129,7 +129,7 @@ class Key:
         return self._char
 
     def __str__(self):
-        return f'char: {self.char}'
+        return self.char
 
 
 async def print_buffer(buffer):

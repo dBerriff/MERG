@@ -26,7 +26,7 @@ from time import ticks_ms
 
 
 class SwitchMatrix:
-    """ base class for matrix of up to 16 x 16 switched nodes
+    """ base class for matrix of switched nodes
         - matrix data returned as linear list index: (row * n_cols + col)
         - switch each matrix row ON and scan each column for input
         - m_list as list; array gives marginal benefits, if any

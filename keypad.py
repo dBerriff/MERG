@@ -122,6 +122,7 @@ class Key:
         self.state = 0
         self.pressed = False
         self.time_pressed = None
+        self.is_modifier = False
 
     @property
     def char(self):

@@ -26,8 +26,8 @@ from time import ticks_ms
 
 
 class SwitchMatrix:
-    """ base class for matrix of switched nodes
-        - matrix data returned as linear list index: (row * n_cols + col)
+    """ matrix of switched nodes
+        - matrix data returned as linear list index: index = (row * n_cols + col)
         - switch each matrix row ON and scan each column for input
         - m_list as list; array gives marginal benefits, if any
     """
@@ -78,7 +78,7 @@ class KeyPad(SwitchMatrix):
     def __init__(self, cols, rows, buffer):
         super().__init__(cols, rows)
         self.buffer = buffer
-        # list maintains correspondence between matrix and keys
+        # maintain correspondence between m_list and key list
         self.key_list = []
         index = 0
         # dict for future processing
@@ -93,7 +93,6 @@ class KeyPad(SwitchMatrix):
     async def key_input(self):
         """ coro: detect key-press in switch matrix
                 - data producer: put char into buffer
-                - no other processing in this demo
         """
         # poll switches
         while True:
@@ -122,7 +121,6 @@ class Key:
         self.state = 0
         self.pressed = False
         self.time_pressed = None
-        self.is_modifier = False
 
     @property
     def char(self):
@@ -132,12 +130,68 @@ class Key:
         return self.char
 
 
-async def print_buffer(buffer):
-    """ consumer: demonstrate buffered input """
-    print('Waiting for keypad input...')
+async def get_char(buffer_):
+    """ get char type from character sets """
+    digits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
+    letters = {'A', 'B', 'C', 'D'}
+    symbols = {'*', '#'}
+    
+    char_ = await buffer_.get()
+    if char_ in digits:
+        char_type_ = 'digit'
+    elif char_ in letters:
+        char_type_ = 'letter'
+    elif char_ in symbols:
+        char_type_ = 'symbol'
+    else:
+        char_type_ = None
+    return char_type_, char_
+
+
+async def lexer(buffer):
+    """ consumer: demonstrate buffered input
+        - very basic lexer included
+    """
+
+    # tokens = {'integer', 'string', 'symbol'}
+    
+    token_type = None
+    token_value = None
     while True:
-        char = await buffer.get()
-        print(f'char: {char} from buffer')
+        char_type, char = await get_char(buffer)
+        if char_type == 'digit':
+            token_type = 'integer'
+            token_value = char
+            while True:
+                print(f'Entered: {token_value}')
+                char_type, char = await get_char(buffer)
+                if char_type == 'digit':
+                    token_value += char
+                elif char_type == 'symbol':
+                    if char == '#':
+                        break
+                else:
+                    print('Enter digit or #')
+        elif char_type == 'letter':
+            token_type = 'string'
+            token_value = char
+            while True:
+                print(f'Entered: {token_value}')
+                char_type, char = await get_char(buffer)
+                if char_type == 'letter' or char_type == 'digit':
+                    token_value += char
+                elif char_type == 'symbol':
+                    if char == '#':
+                        break
+                else:
+                    print('Enter letter, digit or #')
+        elif char_type == 'symbol':
+            token_type = 'symbol'
+            token_value = char
+
+        if token_type == 'integer':
+            token_value = int(token_value)
+        print(f'token: {token_type} value: {token_value}')
 
 
 async def main():
@@ -147,9 +201,8 @@ async def main():
 
     buffer = KeyBuffer()
     kp = KeyPad(cols, rows, buffer)
-    for key in kp.key_list:
-        print(key)
-    asyncio.create_task(print_buffer(buffer))
+    print('Press # to end integer or string input.')
+    asyncio.create_task(lexer(buffer))
     await kp.key_input()
 
 

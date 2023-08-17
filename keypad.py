@@ -6,7 +6,7 @@
         4-5-6-B
         7-8-9-C
         *-0-#-D
-    With connections numbered from 0, left-to-right;
+    Connections numbered from left-to-right;
     Elegoo diagram shows:
     0:  1-2-3-A  Rows
     1:  4-5-6-B
@@ -33,7 +33,7 @@ class SwitchMatrix:
     """
     
     def __init__(self, cols, rows):
-        # columns are scanned inputs; rows are set high in sequence
+        # columns are scanned inputs; rows are outputs set high in sequence
         self.col_pins = [Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in cols]
         self.row_pins = [Pin(pin, mode=Pin.OUT, value=0) for pin in rows]
         # matrix scanned with (col, row) coordinates
@@ -80,15 +80,12 @@ class KeyPad(SwitchMatrix):
         self.buffer = buffer
         # maintain correspondence between m_list and key list
         self.key_list = []
-        index = 0
         # dict for future processing
         self.char_key = {}
-        for row in range(self.n_rows):
-            for col in range(self.n_cols):
-                key = Key(self.key_char_list[index])
-                self.key_list.append(key)
-                index += 1
-                self.char_key[key.char] = key
+        for char in self.key_char_list:
+            key = Key(char)
+            self.key_list.append(key)
+            self.char_key[char] = key
 
     async def key_input(self):
         """ coro: detect key-press in switch matrix
@@ -104,9 +101,9 @@ class KeyPad(SwitchMatrix):
                 key = self.key_list[index]
                 if node_state == 1 and key.state == 0:
                     key.state = 1
-                    await self.buffer.put(key.char)
                     key.time_pressed = scan_time
-                elif key.state == 1 and node_state == 0:
+                    await self.buffer.put(key.char)
+                elif node_state == 0 and key.state == 1:
                     key.state = 0
             await asyncio.sleep_ms(200)
 
@@ -150,41 +147,58 @@ async def get_char(buffer_):
 
 async def lexer(buffer):
     """ consumer: demonstrate buffered input
-        - very basic lexer included
+        - extremely basic lexer included
     """
-
     # tokens = {'integer', 'string', 'symbol'}
     
     token_type = None
     token_value = None
     while True:
+        print('Integer: enter a digit; String: enter a letter:')
         char_type, char = await get_char(buffer)
+
         if char_type == 'digit':
             token_type = 'integer'
             token_value = char
-            while True:
+            scan = True
+            while scan:
                 print(f'Entered: {token_value}')
                 char_type, char = await get_char(buffer)
                 if char_type == 'digit':
                     token_value += char
                 elif char_type == 'symbol':
-                    if char == '#':
+                    if char == '*':
+                        if len(token_value) > 1:
+                            token_value = token_value[:-1]
+                        else:
+                            token_type = None
+                            token_value = None
+                            scan = False
+                    elif char == '#':
                         break
                 else:
-                    print('Enter digit or #')
+                    print('Enter a digit or #')
+
         elif char_type == 'letter':
             token_type = 'string'
             token_value = char
-            while True:
+            scan = True
+            while scan:
                 print(f'Entered: {token_value}')
                 char_type, char = await get_char(buffer)
                 if char_type == 'letter' or char_type == 'digit':
                     token_value += char
                 elif char_type == 'symbol':
-                    if char == '#':
+                    if char == '*':
+                        if len(token_value) > 1:
+                            token_value = token_value[:-1]
+                        else:
+                            token_type = None
+                            token_value = None
+                            scan = False
+                    elif char == '#':
                         break
-                else:
-                    print('Enter letter, digit or #')
+
         elif char_type == 'symbol':
             token_type = 'symbol'
             token_value = char

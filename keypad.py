@@ -2,7 +2,7 @@
     Read matrix keypad with Pi Pico
     Generic keypad supplied as component in Elegoo kit.
     Simple "membrane" switches close at each column-to-row intersection
-    Elegoo diagram shows:
+    Elegoo diagram shows connections as, left-to-right:
     0:  1-2-3-A  Rows
     1:  4-5-6-B
     2:  7-8-9-C

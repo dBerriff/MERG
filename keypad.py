@@ -28,6 +28,7 @@ from time import ticks_ms
 class SwitchMatrix:
     """ matrix of switched nodes
         - matrix data returned as linear list index: index = (row * n_cols + col)
+        - rationale: simple, quick code hidden from end-user
         - switch each matrix row ON and scan each column for input
         - m_list as list; array gives marginal benefits, if any
     """
@@ -36,10 +37,9 @@ class SwitchMatrix:
         # columns are scanned inputs; rows are outputs set high in sequence
         self.col_pins = [Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in cols]
         self.row_pins = [Pin(pin, mode=Pin.OUT, value=0) for pin in rows]
-        # matrix scanned with (col, row) coordinates
+        # matrix scanned into list with (col, row) coordinates
         self.n_cols = len(cols)
         self.n_rows = len(rows)
-        # list maintains correspondence between matrix and switch states
         self._list_len = self.n_cols * self.n_rows
         self.m_list = [0] * self._list_len
 
@@ -75,10 +75,14 @@ class KeyPad(SwitchMatrix):
                      '*', '0', '#', 'D'
                      )
 
+    digits = '0123456789'
+    letters = 'ABCD'
+    symbols = '*#'
+
     def __init__(self, cols, rows, buffer):
         super().__init__(cols, rows)
         self.buffer = buffer
-        # maintain correspondence between m_list and key list
+        # maintain correspondence between m_list and key_list
         self.key_list = []
         # dict for future processing
         self.char_key = {}
@@ -127,96 +131,109 @@ class Key:
         return self.char
 
 
-async def get_char(buffer_):
-    """ get char type from character sets """
-    digits = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
-    letters = {'A', 'B', 'C', 'D'}
-    symbols = {'*', '#'}
-    
-    char_ = await buffer_.get()
-    if char_ in digits:
-        char_type_ = 'digit'
-    elif char_ in letters:
-        char_type_ = 'letter'
-    elif char_ in symbols:
-        char_type_ = 'symbol'
-    else:
-        char_type_ = None
-    return char_type_, char_
-
-
-async def lexer(buffer):
-    """ consumer: demonstrate buffered input
-        - extremely basic lexer included
+class Lexer:
+    """ implemented as class for consistent script structure but
+        could also be implemented as a function.
+        'Tokenize' input stream using an extremely simple lexer.
     """
-    # tokens = {'integer', 'string', 'symbol'}
-    
-    token_type = None
-    token_value = None
-    while True:
-        print('Integer: enter a digit; String: enter a letter:')
-        char_type, char = await get_char(buffer)
+
+    def __init__(self, kp_, buffer_):
+        self.kp = kp_
+        self.buffer = buffer_
+        self.digits = kp_.digits
+        self.letters = kp_.letters
+        self.symbols = kp_.symbols
+
+    async def get_char(self):
+        """ get char from buffer
+            - type matched to keypad character set
+        """
+        char_ = await self.buffer.get()
+        if char_ in self.digits:
+            char_type_ = 'digit'
+        elif char_ in self.letters:
+            char_type_ = 'letter'
+        elif char_ in self.symbols:
+            char_type_ = 'symbol'
+        else:
+            char_type_ = None
+        return char_type_, char_
+
+    async def get_token(self):
+        """ extremely basic lexer
+            - tokenize integers, strings and symbols
+            - tokens are: 'integer', 'string' or 'symbol'}
+        """
+
+        async def scan_stream(token_type_, token_value_, char_set):
+            """ simple serial scanner to string; symbols end scan:
+                - '#' ends input with current value
+                - '*' deletes last char; if value becomes empty, returns None
+            """
+            while True:
+                print(f'Entered: {token_value_}')
+                char_type_, char_ = await self.get_char()
+                if char_type_ in char_set:
+                    token_value_ += char_
+                elif char_type_ == 'symbol':
+                    if char_ == '*':
+                        if len(token_value_) > 1:
+                            token_value_ = token_value_[:-1]
+                        else:
+                            token_type_ = None
+                            token_value_ = None
+                            break
+                    elif char_ == '#':
+                        break
+                else:
+                    print('Enter a digit or #')
+            return token_type_, token_value_
+
+        token_type = None
+        token_value = None
+        char_type, char = await self.get_char()
 
         if char_type == 'digit':
             token_type = 'integer'
             token_value = char
-            scan = True
-            while scan:
-                print(f'Entered: {token_value}')
-                char_type, char = await get_char(buffer)
-                if char_type == 'digit':
-                    token_value += char
-                elif char_type == 'symbol':
-                    if char == '*':
-                        if len(token_value) > 1:
-                            token_value = token_value[:-1]
-                        else:
-                            token_type = None
-                            token_value = None
-                            scan = False
-                    elif char == '#':
-                        break
-                else:
-                    print('Enter a digit or #')
-
+            token_type, token_value = await scan_stream(
+                token_type, token_value, {'digit'})
         elif char_type == 'letter':
             token_type = 'string'
             token_value = char
-            scan = True
-            while scan:
-                print(f'Entered: {token_value}')
-                char_type, char = await get_char(buffer)
-                if char_type == 'letter' or char_type == 'digit':
-                    token_value += char
-                elif char_type == 'symbol':
-                    if char == '*':
-                        if len(token_value) > 1:
-                            token_value = token_value[:-1]
-                        else:
-                            token_type = None
-                            token_value = None
-                            scan = False
-                    elif char == '#':
-                        break
-
+            token_type, token_value = await scan_stream(
+                token_type, token_value, {'letter', 'digit'})
         elif char_type == 'symbol':
             token_type = 'symbol'
             token_value = char
 
         if token_type == 'integer':
             token_value = int(token_value)
-        print(f'token: {token_type} value: {token_value}')
+        return token_type, token_value
 
 
 async def main():
+    """ test keypad input and parsing """
+    
+    async def consumer(lex_):
+        """ consume input stream """
+        while True:
+            print('Integer: enter a digit; String: enter a letter:')
+            t_type, t_value = await lex_.get_token()
+            print(f'token: {t_type} value: {t_value}')
+
     # KeyPad: RPi Pico pin assignments
     cols = (12, 13, 14, 15)
     rows = (8, 9, 10, 11)
 
     buffer = KeyBuffer()
     kp = KeyPad(cols, rows, buffer)
-    print('Press # to end integer or string input.')
-    asyncio.create_task(lexer(buffer))
+    lex = Lexer(kp, buffer)
+    prompt = """    - Integers start with a number, strings with a letter
+    - Press # to end integer or string input, * to delete a character"""
+    print(prompt)
+    print()
+    asyncio.create_task(consumer(lex))
     await kp.key_input()
 
 

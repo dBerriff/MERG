@@ -66,7 +66,7 @@ class Queue:
         print(q_str)
 
 
-class KeyBuffer:
+class CharBuffer:
     """ single item buffer
         - similar interface to Queue
         - put_lock supports multiple data producers
@@ -118,7 +118,7 @@ async def main():
         return p_list
 
     # test KeyBuffer or Queue with 2 producers
-    queue = KeyBuffer()
+    queue = CharBuffer()
     # queue = Queue(8)
 
     task0 = asyncio.create_task(fill_q(queue, 0, 20))

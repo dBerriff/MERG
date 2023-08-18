@@ -2,7 +2,7 @@
 
 from machine import Pin
 import uasyncio as asyncio
-from queue import KeyBuffer
+from queue import CharBuffer
 
 
 class SwitchMatrix:
@@ -83,7 +83,7 @@ async def main():
     cols = (8, 9, 10, 11)
     rows = (12, 13, 14, 15)
 
-    buffer = KeyBuffer()
+    buffer = CharBuffer()
     kp = KeyPad(cols, rows, buffer)
     asyncio.create_task(kp.key_input())
     await print_buffer(buffer)

@@ -19,13 +19,16 @@ class Lexer:
     async def get_token(self):
         """ extremely basic lexer
             - tokenize integers, strings and symbols
-            - token_types: 'integer', 'string' or 'symbol'
+            - an integer starts with a digit
+            - a string starts with a letter
+            - a symbols is a single character
         """
 
         async def scan_stream(token_value_, char_set):
-            """ serial scanner to string; symbols end scan:
+            """ serial input scanner
+                - a symbol or full delete ends scan
                 - '#' ends input with current value
-                - '*' deletes latest char; returns None if empty string
+                - '*' deletes latest char
             """
             while True:
                 print(f'Entered: {token_value_}')

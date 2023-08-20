@@ -7,10 +7,13 @@ class Lexer:
     """ implemented as class for consistent script structure but
         could also be implemented as a function.
         'Tokenize' input stream using an extremely simple lexer.
+        Parameters:
+        - kp_: for keypad characters;
+        - get_char_: get next character
     """
 
-    def __init__(self, kp_, buffer_):
-        self.get_char = buffer_.get
+    def __init__(self, kp_, get_char_):
+        self.get_char = get_char_
         self.digits = kp_.digits
         self.letters = kp_.letters
         self.alphanumeric = kp_.alphanumeric
@@ -24,7 +27,7 @@ class Lexer:
             - a symbols is a single character
         """
 
-        async def scan_stream(token_value_, char_set):
+        async def scan_input(token_value_, char_set):
             """ serial input scanner
                 - a symbol or full delete ends scan
                 - '#' ends input with current value
@@ -35,37 +38,31 @@ class Lexer:
                 char_ = await self.get_char()
                 if char_ in char_set:
                     token_value_ += char_
-                elif char_ in self.symbols:
-                    if char_ == '*':
-                        if len(token_value_) > 1:
-                            token_value_ = token_value_[:-1]
-                        else:
-                            token_value_ = None
-                            break
-                    elif char_ == '#':
+                elif char_ == '*':
+                    if len(token_value_) > 1:
+                        token_value_ = token_value_[:-1]
+                    else:
+                        token_value_ = None
                         break
+                elif char_ == '#':
+                    break
             return token_value_
 
+        token_type = None
+        token_value = None
         char = await self.get_char()
-
         if char in self.digits:
-            token_type = 'integer'
-            token_value = await scan_stream(char, self.digits)
+            token_value = await scan_input(char, self.digits)
             if token_value:
                 token_value = int(token_value)
-            else:
-                token_type = None
+                token_type = 'integer'
         elif char in self.letters:
-            token_type = 'string'
-            token_value = await scan_stream(char, self.alphanumeric)
-            if not token_value:
-                token_type = None
+            token_value = await scan_input(char, self.alphanumeric)
+            if token_value:
+                token_type = 'string'
         elif char in self.symbols:
-            token_type = 'symbol'
             token_value = char
-        else:
-            token_type = None
-            token_value = None
+            token_type = 'symbol'
         return token_type, token_value
 
 

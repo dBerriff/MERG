@@ -62,7 +62,7 @@ class KeyPad(SwitchMatrix):
         - output key-value to Buffer object
         - matrix nodes and key objects matched in (col, row) order
     """
-    key_char_list = tuple('123A456B789C*0#D')
+    key_char_list = tuple('123A456B789C*0#D')  # iterable
     digits = set('0123456789')
     letters = set('ABCD')
     symbols = set('*#')
@@ -71,15 +71,11 @@ class KeyPad(SwitchMatrix):
     def __init__(self, cols, rows, buffer):
         super().__init__(cols, rows)
         self.buffer = buffer
-        self.key_list = []
-        for char in KeyPad.key_char_list:
-            self.key_list.append(Key(char))
-        self.key_list = tuple(self.key_list)
+        self.key_list = tuple([Key(char) for char in KeyPad.key_char_list])
  
     async def key_input(self):
         """ coro: detect key-presses in switch matrix
             - data producer: put char into buffer
-
         """
         scan_interval = 100  # ms - adjust as required
         while True:
@@ -129,7 +125,7 @@ async def main():
 
     buffer = CharBuffer()
     kp = KeyPad(cols, rows, buffer)
-    lex = Lexer(kp, buffer)
+    lex = Lexer(kp, buffer.get)
     prompt = '- Integers start with a number, strings with a letter\n'
     prompt += '- Press # to end integer or string input, * to delete a character\n'
     print(prompt)

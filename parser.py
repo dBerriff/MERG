@@ -49,20 +49,20 @@ class Lexer:
             return token_value_
 
         token_type = None
-        token_value = None
-        char = await self.get_char()
-        if char in self.digits:
-            token_value = await scan_input(char, self.digits)
+        token_value = await self.get_char()
+        if token_value in self.digits:
+            token_value = await scan_input(token_value, self.digits)
             if token_value:
                 token_value = int(token_value)
                 token_type = 'integer'
-        elif char in self.letters:
-            token_value = await scan_input(char, self.alphanumeric)
+        elif token_value in self.letters:
+            token_value = await scan_input(token_value, self.alphanumeric)
             if token_value:
                 token_type = 'string'
-        elif char in self.symbols:
-            token_value = char
+        elif token_value in self.symbols:
             token_type = 'symbol'
+        else:
+            token_value = None
         return token_type, token_value
 
 

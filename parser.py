@@ -1,4 +1,7 @@
-""" basic lexer """
+""" basic lexer
+    - for asyncio guidance and source acknowledged, see:
+      https://github.com/peterhinch/micropython-async
+"""
 
 import uasyncio as asyncio
 from micropython import const

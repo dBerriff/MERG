@@ -26,7 +26,7 @@
 from machine import Pin
 import uasyncio as asyncio
 from queue import CharBuffer
-from parser import Lexer
+from parser import Lexer, LToken
 
 
 class SwitchMatrix:
@@ -35,9 +35,9 @@ class SwitchMatrix:
     """
     
     def __init__(self, cols, rows):
-        # row outputs set high in sequence, columns scanned as inputs
-        self.col_pins = tuple([Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in cols])
-        self.row_pins = tuple([Pin(pin, mode=Pin.OUT, value=0) for pin in rows])
+        # rows set high in sequence, columns scanned as inputs
+        self.col_pins = [Pin(pin, mode=Pin.IN, pull=Pin.PULL_DOWN) for pin in cols]
+        self.row_pins = [Pin(pin, mode=Pin.OUT, value=0) for pin in rows]
         self._list_len = len(cols) * len(rows)
         self.m_list = [0] * self._list_len  # fixed-length list
 
@@ -79,9 +79,9 @@ class KeyPad(SwitchMatrix):
         """
         scan_interval = 100  # ms - adjust as required
         while True:
-            matrix_states = self.scan_matrix()
+            m_states = self.scan_matrix()
             for index in range(len(self)):
-                node_state = matrix_states[index]
+                node_state = m_states[index]
                 key = self.key_list[index]
                 if key.state != node_state:
                     if node_state == 1:
@@ -112,12 +112,13 @@ async def main():
     async def consumer(lex_):
         """ consume input characters """
         # tokens returned as t_type: 'integer', 'string' or 'symbol'
-        t_value = None
+        t_ = LToken()
         print('consumer() started: enter "DDD" to end')
-        while t_value != 'DDD':
+        while t_.value != 'DDD':
             print('Integer: enter a digit; String: enter a letter:')
-            t_type, t_value = await lex_.get_token()
-            print(f'token: type: {t_type} {type(t_value)}; value: {t_value}')
+            t_ = await lex_.get_token()
+            t_.set_type()
+            print(t_)
 
     # KeyPad: RPi Pico pin assignments
     cols = (12, 13, 14, 15)

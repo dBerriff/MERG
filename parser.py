@@ -1,15 +1,38 @@
 """ basic lexer """
 
 import uasyncio as asyncio
+from micropython import const
 
+
+class LToken:
+    """ lexer/parser token """
+    
+    INT = const('int')
+    STR = const('str')
+    SMB = const('smb')
+    
+    val_type = {'int': int, 'smb': str, 'str': str}
+
+    def __init__(self):
+        self.type = None
+        self.value = None
+
+    def set_type(self):
+        """ set token value to type int """
+        if self.type in self.val_type:
+            self.value = self.val_type[self.type](self.value)
+        else:
+            self.type = None
+
+    def __str__(self):
+        return f'{self.type} {self.value} {type(self.value)}'
+        
 
 class Lexer:
-    """ implemented as class for consistent script structure but
-        could also be implemented as a function.
-        'Tokenize' input stream using an extremely simple lexer.
+    """ 'Tokenize' input stream using an simple lexer.
         Parameters:
-        - kp_: for keypad characters;
-        - get_char_: get next character
+        - kp_: object, includes keypad characters
+        - get_char_: method
     """
 
     def __init__(self, kp_, get_char_):
@@ -22,48 +45,43 @@ class Lexer:
     async def get_token(self):
         """ extremely basic lexer
             - tokenize integers, strings and symbols
-            - an integer starts with a digit
-            - a string starts with a letter
-            - a symbols is a single character
+            - integer starts with a digit
+            - string starts with a letter
+            - symbol is a single character
         """
 
-        async def scan_input(token_value_, char_set):
-            """ serial input scanner
-                - a symbol or full delete ends scan
-                - '#' ends input with current value
-                - '*' deletes latest char
+        async def scan_input(string_, char_set):
+            """ serial input scanner, returns input as string
+                - '*': delete char
+                - '#': end scan
             """
             while True:
-                print(f'Entered: {token_value_}')
+                print(f'Entered: {string_}')
                 char_ = await self.get_char()
                 if char_ in char_set:
-                    token_value_ += char_
+                    string_ += char_
                 elif char_ == '*':
-                    if len(token_value_) > 1:
-                        token_value_ = token_value_[:-1]
+                    if len(string_) > 1:
+                        string_ = string_[:-1]
                     else:
-                        token_value_ = None
-                        break
+                        return None
                 elif char_ == '#':
-                    break
-            return token_value_
+                    return string_
 
-        token_type = None
-        token_value = await self.get_char()
-        if token_value in self.digits:
-            token_value = await scan_input(token_value, self.digits)
-            if token_value:
-                token_value = int(token_value)
-                token_type = 'integer'
-        elif token_value in self.letters:
-            token_value = await scan_input(token_value, self.alphanumeric)
-            if token_value:
-                token_type = 'string'
-        elif token_value in self.symbols:
-            token_type = 'symbol'
-        else:
-            token_value = None
-        return token_type, token_value
+        token_ = LToken()
+        char = await self.get_char()
+        if char in self.digits:
+            token_.type = token_.INT
+            token_.value = await scan_input(char, self.digits)
+        elif char in self.letters:
+            token_.type = token_.STR
+            token_.value = await scan_input(char, self.alphanumeric)
+        elif char in self.symbols:
+            token_.type = token_.SMB
+            token_.value = char
+        if not token_.value:
+            token_.type = None
+        return token_
 
 
 async def main():

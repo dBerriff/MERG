@@ -6,7 +6,7 @@
     - servo pins provide unique id's
 """
 
-import uasyncio as asyncio  # cooperative multitasking
+import asyncio  # cooperative multitasking
 from machine import Pin, PWM
 from time import sleep_ms
 
@@ -27,7 +27,7 @@ class ServoSG9x(PWM):
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)  # include for offset degrees
     DEG_MAX = const(180)
-    NS_PER_DEGREE = const(11_111)
+    NS_PER_DEGREE = const((PW_MAX - PW_MIN) // (DEG_MAX - DEG_MIN))
 
     OFF = const(0)
     ON = const(1)
@@ -51,10 +51,7 @@ class ServoSG9x(PWM):
 
     def degrees_to_ns(self, degrees):
         """ convert float degrees to int pulse-width ns """
-        if self.DEG_MIN <= degrees <= self.DEG_MAX:
-            return int(self.PW_MIN + (degrees - self.DEG_MIN) * self.NS_PER_DEGREE)
-        else:
-            return self.PW_CTR
+        return int(self.PW_MIN + (degrees - self.DEG_MIN) * self.NS_PER_DEGREE)
 
     def set_off(self):
         """ move direct to off position; set object attributes """
@@ -105,6 +102,7 @@ class ServoSG9x(PWM):
 class ServoGroup:
     """ create a list of servo objects for servo control
         - dict of index: servo-object
+        - get switch-demands from self.buffer
     """
 
     def __init__(self, servo_parameters, buffer):
@@ -158,13 +156,14 @@ class ServoGroup:
 
 class SwitchGroup:
     """ switch states to set servos
+        ! test version with pre-set sw_states
         - switch_servos_ binds each switch to a list of servos
+        - switch demands are put in self.buffer
     """
 
-    def __init__(self, sw_states, switch_servos, data_buffer):
-        self.sw_states = sw_states
+    def __init__(self, switch_servos, data_buffer):
         self.switch_servos = switch_servos
-        self.data_buffer = data_buffer
+        self.buffer = data_buffer
 
     def get_servo_demand(self, sw_states_):
         """ return dict- servo_id: demand """
@@ -175,24 +174,19 @@ class SwitchGroup:
                 servo_demand[servo_id] = sw_demand
         return servo_demand
 
-    async def run_states(self):
-        """ run through a set of switch states """
+    async def run_states(self, sw_states):
+        """ ! test: run through a set of switch states """
         # data producer
-        for state in self.sw_states:
+        for state in sw_states:
             demand = self.get_servo_demand(state)
-            await self.data_buffer.put(demand)
+            await self.buffer.put(demand)
         # producer would normally run forever, but end this test
-        for _ in range(2):
-            await asyncio.sleep_ms(10_000)
-            print()
-            print('test finished')
+        await asyncio.sleep_ms(10_000)
 
 
 class DataBuffer:
     """ single item buffer
         - similar interface to Queue
-        - Event.set() "must be called from within a task"
-        - hence put() and get() as coros
         - put_lock supports multiple producers
         - single consumer assumed
     """
@@ -255,7 +249,7 @@ async def main():
     # === end of parameters
 
     buffer = DataBuffer()
-    switch_group = SwitchGroup(test_sw_states, switch_servos, buffer)
+    switch_group = SwitchGroup(switch_servos, buffer)
     servo_group = ServoGroup(servo_params, buffer)
     print('initialising servos...')
     servo_group.initialise(servo_init)
@@ -263,7 +257,9 @@ async def main():
     # start consumer
     asyncio.create_task(servo_group.match_demand())
     # start producer
-    await switch_group.run_states()
+    await switch_group.run_states(test_sw_states)
+
+    print()
     print('test complete')
 
 

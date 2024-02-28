@@ -5,7 +5,7 @@
     - servos are set asynchronously
 """
 
-import uasyncio as asyncio
+import asyncio
 from machine import Pin
 from micropython import const
 import array

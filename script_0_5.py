@@ -16,16 +16,13 @@ class ServoSG9x(PWM):
         - Pico PWM implements 0% to 100% duty cycle inclusive
         - user units are degrees
         - internal units are pulse-width in ns
-          (servos usually specified by pulse-width)
     """
 
-    # SG90 servos specify f = 50Hz
-    FREQ = const(50)  # Hz
+    FREQ = const(50)  # Hz for SG90 servos
 
-    # specified servo motion is from approximately 0 to 180 degrees
+    # motion from approximately 0 to 180 degrees
     # (45 to 135 degrees should be used in practice)
     # corresponding specified pulse widths: 500_000 to 2_500_000 ns
-    # set more restrictive values if appropriate
     PW_MIN = const(500_000)  # ns
     PW_MAX = const(2_500_000)  # ns
     DEG_MIN = const(0)
@@ -71,7 +68,6 @@ class ServoSG9x(PWM):
 
     def move_servo(self, pw_):
         """ servo machine.PWM setting method """
-        # guard against out-of-range demands
         if self.PW_MIN <= pw_ <= self.PW_MAX:
             self.duty_ns(pw_)
 
@@ -106,7 +102,6 @@ class ServoSG9x(PWM):
 
     def set_servo_state(self, demand_):
         """ set servo to demand position off or on """
-        # set parameters
         if demand_ == self.state:
             return
         elif demand_ == self.OFF:
@@ -119,7 +114,7 @@ class ServoSG9x(PWM):
         self.activate_pulse()
         self.transition(final_ns)
         self.zero_pulse()
-        # save final state for next move
+        # save final state
         self.pw_ns = final_ns
         self.state = demand_
 
@@ -131,11 +126,13 @@ class ServoGroup:
     """
     
     def __init__(self, servo_parameters, switch_servos_):
-        self.servos = {pin: ServoSG9x(pin, *servo_parameters[pin])
-                       for pin in servo_parameters}
+        self.servos = {}
+        for pin in servo_parameters:
+            self.servos[pin] = ServoSG9x(pin, *servo_parameters[pin])
         self.switch_servos = switch_servos_
-        self.switch_list = list(self.servos.keys())
+        self.switch_list = list(self.switch_servos.keys())
         self.switch_list.sort()
+        print(self.switch_list)
 
     def initialise(self, servo_init_):
         """ initialise servos by servo_init dict
@@ -145,7 +142,7 @@ class ServoGroup:
             if servo_init_[pin] == 1:
                 self.servos[pin].set_on()
             else:
-                self.servos[pin].set_off_on()
+                self.servos[pin].set_off()
             sleep_ms(500)  # allow movement time per servo
         for servo in self.servos.values():
             servo.duty_ns(0)
@@ -195,7 +192,7 @@ def main():
     servo_group = ServoGroup(servo_params, switch_servos)
     # confirm servo instantiation
     for servo in servo_group.servos.values():
-        print(f'servo id: {servo.id_}, off_ns: {servo.off_ns}, on_ns: {servo.on_ns}')
+        print(f'servo id: {servo.id}, off_ns: {servo.off_ns}, on_ns: {servo.on_ns}')
     print('initialising servos...')
     servo_group.initialise(servo_init)
     print('servo_group initialised')

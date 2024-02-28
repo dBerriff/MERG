@@ -18,7 +18,7 @@ def main():
     
     # {pin: (off_deg, on_deg [, transition_time])}
     # transition time defaults to 3s to match Tortoise turnout motor
-    servo_params = {0: [45, 135],
+    servo_params = {0: [45, 135, 2],
                     1: [135, 45],
                     2: [45, 135],
                     3: [135, 45]

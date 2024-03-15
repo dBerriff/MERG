@@ -32,7 +32,7 @@ class LToken:
         
 
 class Lexer:
-    """ 'Tokenize' input stream using an simple lexer.
+    """ 'Tokenize' input stream using a simple lexer.
         Parameters:
         - kp_: object, includes keypad characters
         - get_char_: method
@@ -51,6 +51,7 @@ class Lexer:
             - integer starts with a digit
             - string starts with a letter
             - symbol is a single character
+            - # ends a token
         """
 
         async def scan_input(string_, char_set):
